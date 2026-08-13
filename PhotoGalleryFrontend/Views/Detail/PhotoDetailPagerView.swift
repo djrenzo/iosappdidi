@@ -11,6 +11,7 @@ struct PhotoDetailPagerView: View {
     @State private var showTagEditor = false
     @State private var showInfo = false
     @State private var dismissProgress: CGFloat = 0
+    @State private var toastMessage: String?
 
     init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void) {
         self.photos = photos
@@ -45,10 +46,21 @@ struct PhotoDetailPagerView: View {
             VStack {
                 topBar
                 Spacer()
+                if let toastMessage {
+                    Text(toastMessage)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .padding(.bottom, 12)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
                 if showInfo { infoPanel }
                 bottomBar
             }
             .opacity(max(0, 1 - Double(dismissProgress) * 2))
+            .animation(.easeOut(duration: 0.2), value: toastMessage)
         }
         .sheet(isPresented: $showTagEditor) { TagEditorSheet(viewModel: detailVM) }
         .preferredColorScheme(.dark)
@@ -83,12 +95,31 @@ struct PhotoDetailPagerView: View {
             Button { showTagEditor = true } label: {
                 Image(systemName: "tag")
             }
+            Button {
+                Task { await downloadOriginal() }
+            } label: {
+                if detailVM.isDownloading {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "arrow.down.circle")
+                }
+            }
+            .disabled(detailVM.isDownloading)
         }
         .font(.title2)
         .foregroundStyle(.white)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
         .background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
+    }
+
+    private func downloadOriginal() async {
+        await detailVM.downloadOriginal(fallbackOriginalUrl: currentPhoto?.originalUrl)
+        toastMessage = detailVM.downloadSucceeded ? "Saved to Photos" : detailVM.errorMessage
+        detailVM.errorMessage = nil
+        guard toastMessage != nil else { return }
+        try? await Task.sleep(for: .seconds(2.5))
+        toastMessage = nil
     }
 
     private var infoPanel: some View {

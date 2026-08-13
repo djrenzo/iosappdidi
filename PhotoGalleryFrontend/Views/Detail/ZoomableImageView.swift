@@ -92,11 +92,15 @@ struct ZoomableImageView: View {
 
     /// Only engages once a drag reads as clearly more vertical than horizontal, and only
     /// tracks downward motion — so it never competes with TabView's left/right page swipe
-    /// or with an upward flick.
+    /// or with an upward flick. The larger minimumDistance and steep angle requirement matter
+    /// here: any competing DragGesture recognizer that engages *early* during a horizontal
+    /// swipe measurably degrades TabView(.page)'s own paging feel, even if it never applies a
+    /// visual change — so this needs a clear, deliberate vertical motion before it activates
+    /// at all, leaving fast/short horizontal flicks completely uncontested.
     private var dismissGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
+        DragGesture(minimumDistance: 24)
             .onChanged { value in
-                guard isDismissDragging || abs(value.translation.height) > abs(value.translation.width) * 1.5 else { return }
+                guard isDismissDragging || abs(value.translation.height) > abs(value.translation.width) * 2.5 else { return }
                 isDismissDragging = true
                 dismissDrag = max(0, value.translation.height)
                 onDismissProgress(min(1, dismissDrag / dismissDistance))

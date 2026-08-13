@@ -69,8 +69,13 @@ Section refs point there for full detail.
       `(album_id, photo_id)` rows from `album_photos`, return `{ ok: true }`, and (per §7.6)
       restrict to the album's owner.
 - [ ] `PATCH /api/albums/:id` accepting `name` — album rename.
-- [ ] Album cover image / photo count in `GET /api/albums` — `AlbumCard` shows a static
-      placeholder and no count.
+- [ ] **`limit` param on `GET /api/albums/:id/photos`** (e.g. `?limit=4`). `AlbumCard` now
+      renders a 4-thumbnail collage cover (client-side, see `AlbumListView.AlbumCoverView`), but
+      since this route always returns the full album with no limit support, building one cover
+      fetches every photo in every album just to keep the first 4 — fine for small albums, wasteful
+      for large ones. A `limit` param (and ideally a lightweight cover endpoint on `GET /api/albums`
+      itself) would let the album grid load without full per-album fetches, and would also give
+      `AlbumCard` a real photo count for free.
 - [ ] `GET /api/photos?q=` search over filename/folder/tags.
 - [ ] `POST /api/auth/logout` / token revocation — sign-out is client-side only today; a stolen
       JWT stays valid for its full 30-day lifetime.

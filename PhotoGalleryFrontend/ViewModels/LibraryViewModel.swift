@@ -38,4 +38,24 @@ final class LibraryViewModel {
             errorMessage = error.localizedDescription
         }
     }
+
+    /// Top-level folder names (the part before the first "/"), in the order they first
+    /// appear in `folders`. `/api/folders` returns full paths like "1970/Jeugd Taco" for
+    /// every level, so this collapses that into just the roots for a first-level picker.
+    var topLevelFolders: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for folder in folders {
+            let top = folder.split(separator: "/", maxSplits: 1).first.map(String.init) ?? folder
+            if seen.insert(top).inserted {
+                result.append(top)
+            }
+        }
+        return result
+    }
+
+    /// Full folder paths nested directly under `topLevel`, e.g. "1969 en eerder/jeugd cjh".
+    func subfolders(of topLevel: String) -> [String] {
+        folders.filter { $0.hasPrefix(topLevel + "/") }
+    }
 }

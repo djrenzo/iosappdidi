@@ -60,6 +60,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: "Photo Gallery connects to your photo server on the local network to load your library."
+        NSPhotoLibraryAddUsageDescription: "Photo Gallery saves photos you download to your Photos library."
 
 schemes:
   PhotoGalleryFrontend:

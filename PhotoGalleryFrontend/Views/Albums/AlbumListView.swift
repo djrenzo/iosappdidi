@@ -53,10 +53,7 @@ private struct AlbumCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: Theme.cardRadius)
-                .fill(Theme.accentSoft)
-                .frame(height: 110)
-                .overlay(Image(systemName: "photo.stack.fill").font(.title).foregroundStyle(Theme.accent))
+            AlbumCoverView(albumId: album.id)
             Text(album.name).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
             HStack(spacing: 4) {
                 if album.shared == true {
@@ -70,5 +67,73 @@ private struct AlbumCard: View {
         }
         .padding(10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+    }
+}
+
+/// A small collage of the album's first 4 photo thumbnails, or just the first thumbnail
+/// alone when the album has fewer than 4. Falls back to a placeholder glyph when empty.
+private struct AlbumCoverView: View {
+    let albumId: Int
+    @State private var photos: [Photo] = []
+
+    private let api = PhotoServerAPI()
+
+    var body: some View {
+        Group {
+            if photos.isEmpty {
+                RoundedRectangle(cornerRadius: Theme.cardRadius)
+                    .fill(Theme.accentSoft)
+                    .overlay(Image(systemName: "photo.stack.fill").font(.title).foregroundStyle(Theme.accent))
+            } else if photos.count < 4 {
+                singleCover
+            } else {
+                collage
+            }
+        }
+        .frame(height: 110)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
+        .task(id: albumId) { await load() }
+    }
+
+    private var singleCover: some View {
+        GeometryReader { geo in
+            thumb(photos[0], width: geo.size.width, height: geo.size.height)
+        }
+    }
+
+    private var collage: some View {
+        GeometryReader { geo in
+            let cellWidth = (geo.size.width - 2) / 2
+            let cellHeight = (geo.size.height - 2) / 2
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    thumb(photos[0], width: cellWidth, height: cellHeight)
+                    thumb(photos[1], width: cellWidth, height: cellHeight)
+                }
+                HStack(spacing: 2) {
+                    thumb(photos[2], width: cellWidth, height: cellHeight)
+                    thumb(photos[3], width: cellWidth, height: cellHeight)
+                }
+            }
+        }
+    }
+
+    private func thumb(_ photo: Photo, width: CGFloat, height: CGFloat) -> some View {
+        AsyncPhotoImage(path: photo.thumbUrl) {
+            Rectangle().fill(Theme.surfaceElevated)
+        }
+        .frame(width: width, height: height)
+        .clipped()
+    }
+
+    private func load() async {
+        // /api/albums/:id/photos has no limit param — it always returns the full album,
+        // so this fetches everything just to keep the first 4. Fine for typical album
+        // sizes; worth a backend `limit` param if albums get large (see TODO.md).
+        guard let all = try? await api.albumPhotos(id: albumId) else {
+            photos = []
+            return
+        }
+        photos = Array(all.prefix(4))
     }
 }

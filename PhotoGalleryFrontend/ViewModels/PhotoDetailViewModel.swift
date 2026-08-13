@@ -7,6 +7,8 @@ final class PhotoDetailViewModel {
     private(set) var detail: PhotoDetail?
     var isLoading = false
     var errorMessage: String?
+    var isDownloading = false
+    var downloadSucceeded = false
 
     private let api = PhotoServerAPI()
 
@@ -59,6 +61,20 @@ final class PhotoDetailViewModel {
                                        thumbUrl: detail.thumbUrl, previewUrl: detail.previewUrl, originalUrl: detail.originalUrl,
                                        cameraMake: detail.cameraMake, cameraModel: detail.cameraModel,
                                        tags: detail.tags.filter { $0 != tag })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func downloadOriginal(fallbackOriginalUrl: String? = nil) async {
+        guard let originalUrl = detail?.originalUrl ?? fallbackOriginalUrl else { return }
+        isDownloading = true
+        errorMessage = nil
+        downloadSucceeded = false
+        defer { isDownloading = false }
+        do {
+            try await PhotoLibrarySaver.save(path: originalUrl)
+            downloadSucceeded = true
         } catch {
             errorMessage = error.localizedDescription
         }
