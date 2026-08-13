@@ -39,9 +39,10 @@ final class LibraryViewModel {
         }
     }
 
-    /// Top-level folder names (the part before the first "/"), in the order they first
-    /// appear in `folders`. `/api/folders` returns full paths like "1970/Jeugd Taco" for
-    /// every level, so this collapses that into just the roots for a first-level picker.
+    /// Top-level folder names (the part before the first "/"), descending — e.g. so a
+    /// year-numbered library shows the most recent year first. `/api/folders` returns full
+    /// paths like "1970/Jeugd Taco" for every level, so this collapses that into just the
+    /// roots for a first-level picker.
     var topLevelFolders: [String] {
         var seen = Set<String>()
         var result: [String] = []
@@ -51,10 +52,11 @@ final class LibraryViewModel {
                 result.append(top)
             }
         }
-        return result
+        return result.sorted(by: >)
     }
 
     /// Full folder paths nested directly under `topLevel`, e.g. "1969 en eerder/jeugd cjh".
+    /// Ascending, same order `/api/folders` already returns them in.
     func subfolders(of topLevel: String) -> [String] {
         folders.filter { $0.hasPrefix(topLevel + "/") }
     }

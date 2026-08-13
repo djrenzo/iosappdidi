@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileView: View {
     var session: SessionStore
     var library: LibraryViewModel
+    private let serverStore = ServerStore.shared
     @State private var showEdit = false
     @State private var showPassword = false
 
@@ -10,6 +11,16 @@ struct ProfileView: View {
         Binding(
             get: { library.selectedLibrary ?? library.libraries.first ?? "" },
             set: { newValue in Task { await library.selectLibrary(newValue) } }
+        )
+    }
+
+    private var serverSelection: Binding<UUID> {
+        Binding(
+            get: { serverStore.selectedServerId ?? serverStore.servers.first?.id ?? UUID() },
+            set: { newId in
+                guard let server = serverStore.servers.first(where: { $0.id == newId }) else { return }
+                Task { await session.switchServer(to: server) }
+            }
         )
     }
 
@@ -33,8 +44,11 @@ struct ProfileView: View {
                 Section {
                     Button("Edit Profile") { showEdit = true }
                     Button("Change Password") { showPassword = true }
+                    NavigationLink("Manage Servers") {
+                        ManageServersView(session: session)
+                    }
                 }
-                if !library.libraries.isEmpty {
+                if !library.libraries.isEmpty || serverStore.servers.count > 1 {
                     Section("Library") {
                         if library.libraries.count > 1 {
                             Picker("Library", selection: librarySelection) {
@@ -47,6 +61,13 @@ struct ProfileView: View {
                                 Text("Library")
                                 Spacer()
                                 Text(only).foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        if serverStore.servers.count > 1 {
+                            Picker("Server", selection: serverSelection) {
+                                ForEach(serverStore.servers) { server in
+                                    Text(server.name).tag(server.id)
+                                }
                             }
                         }
                     }

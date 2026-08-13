@@ -31,29 +31,29 @@ final class APIClient: @unchecked Sendable {
     }()
 
     private let encoder = JSONEncoder()
-    private let tokenKey = "authJWT"
+
+    /// The JWT and cached user are namespaced per server id (see `SessionStore`) since a
+    /// token from one server's `users` table is meaningless — often invalid outright — on
+    /// another. `nil` when no server is selected, since there's no namespace to key into.
+    private func tokenKey(for serverId: UUID) -> String { "authJWT_\(serverId.uuidString)" }
 
     var authToken: String? {
-        KeychainHelper.get(key: tokenKey)
+        guard let serverId = ServerStore.shared.selectedServer?.id else { return nil }
+        return KeychainHelper.get(key: tokenKey(for: serverId))
     }
 
     func setAuthToken(_ token: String?) {
+        guard let serverId = ServerStore.shared.selectedServer?.id else { return }
         if let token {
-            KeychainHelper.set(token, key: tokenKey)
+            KeychainHelper.set(token, key: tokenKey(for: serverId))
         } else {
-            KeychainHelper.remove(key: tokenKey)
+            KeychainHelper.remove(key: tokenKey(for: serverId))
         }
     }
 
     var baseURL: URL? {
-        guard let raw = UserDefaults.standard.string(forKey: "serverBaseURL"), !raw.isEmpty else {
-            return nil
-        }
-        return URL(string: raw)
-    }
-
-    func setBaseURL(_ urlString: String) {
-        UserDefaults.standard.set(urlString, forKey: "serverBaseURL")
+        guard let host = ServerStore.shared.selectedServer?.host, !host.isEmpty else { return nil }
+        return URL(string: host)
     }
 
     func absoluteURL(forPath path: String) -> URL? {

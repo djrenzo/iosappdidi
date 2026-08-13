@@ -80,6 +80,7 @@ struct LabeledField: View {
     @Binding var text: String
     var isSecure: Bool = false
     var textContentType: UITextContentType?
+    var keyboardType: UIKeyboardType = .default
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -96,6 +97,7 @@ struct LabeledField: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .textContentType(textContentType)
+            .keyboardType(keyboardType)
             .padding(14)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
         }

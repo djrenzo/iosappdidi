@@ -111,7 +111,16 @@ struct ZoomableImageView: View {
                 let shouldDismiss = value.translation.height > 100 || value.predictedEndTranslation.height > 220
                 if shouldDismiss {
                     onDismissProgress(1)
-                    onDismiss()
+                    Task { @MainActor in
+                        // onDismissProgress(1) only *schedules* the fade-to-transparent
+                        // re-render — calling onDismiss() immediately after, in the same
+                        // synchronous call stack, can let the system's dismiss transition
+                        // snapshot the view before that frame is actually painted, animating
+                        // a still-opaque black backdrop away. A short wait guarantees at least
+                        // one render pass lands first.
+                        try? await Task.sleep(for: .milliseconds(50))
+                        onDismiss()
+                    }
                 } else {
                     withAnimation(.interactiveSpring()) {
                         dismissDrag = 0

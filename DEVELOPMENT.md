@@ -17,8 +17,8 @@
 ```
 PhotoGalleryFrontend/
   App/          PhotoGalleryFrontendApp.swift · Theme.swift
-  Models/       Album · Photo · User
-  Networking/   APIClient · ImageCache · KeychainHelper · PhotoServerAPI
+  Models/       Album · Photo · Server · User
+  Networking/   APIClient · ImageCache · KeychainHelper · PhotoServerAPI · ServerStore
   ViewModels/   AlbumsViewModel · LibraryViewModel · PhotoDetailViewModel
                 PhotoGridViewModel · ProfileViewModel · SessionStore
   Views/
@@ -28,11 +28,38 @@ PhotoGalleryFrontend/
     Favorites/  FavoritesView
     Gallery/    FolderPickerView · GalleryView · PhotoThumbnailView
     Main/       MainTabView
-    Profile/    ChangePasswordSheet · EditProfileSheet · ProfileView
+    Profile/    ChangePasswordSheet · EditProfileSheet · ManageServersView · ProfileView
     Root/       RootView
-    Shared/     AsyncPhotoImage · EmptyStateView
+    Shared/     AsyncPhotoImage · AvatarView · EmptyStateView
 public/         PWA/web icons — pwa-512x512.png is the app icon source
 ```
+
+---
+
+## Multi-server support (`ServerStore`)
+
+The app supports multiple named server connections (Profile → Manage Servers to add/remove,
+Profile → Server picker to switch — the picker only appears once 2+ servers exist). `ServerStore`
+persists `[Server]` (`id`, `name`, `host`) plus the selected id to `UserDefaults`, as a plain
+`@unchecked Sendable` `@Observable` singleton (matching `APIClient`/`ImageCache`'s existing
+concurrency pattern rather than `@MainActor`-isolating it, so `APIClient` can read
+`selectedServer` synchronously from any context).
+
+**Auth is namespaced per server id** — the Keychain-stored JWT (`authJWT_<serverId>`) and cached
+user (`cachedUser_<serverId>`) both key off `ServerStore.shared.selectedServer.id`, since a token
+issued by one server's `users` table is meaningless (usually outright invalid) against another.
+Practically: switching to a server you've logged into before restores that session instantly;
+switching to a new one prompts login. `SessionStore.switchServer(to:)` and `.deleteServer(_:)`
+both re-run `bootstrap()` after changing the active server — that transition through
+`phase = .checking` is also what makes `RootView` tear down and rebuild `MainTabView` from
+scratch, which is what clears out the previous server's stale `LibraryViewModel`/album data
+without needing to reset each view model by hand.
+
+A **first-launch install** creates its first `Server` (default name "Home") from
+`ServerSetupView` via `SessionStore.configureServer(name:host:)`. An **existing install**
+upgrading from before multi-server support migrates automatically — `ServerStore` wraps
+whatever was in the old single `serverBaseURL` default into a "Home" entry the first time it
+loads — so nothing needs to change from the user's side.
 
 ---
 
@@ -46,15 +73,17 @@ The backend issues **JWT Bearer tokens**, not session cookies.
 | `POST /api/auth/signup` | `{ token, user, role }` |
 | All protected routes | require `Authorization: Bearer <token>` |
 
-Token lifetime is **30 days**. The client stores the token in the Keychain under the key `authJWT` via `APIClient.setAuthToken()`. `APIClient.rawRequest()` injects the header automatically on every request.
+Token lifetime is **30 days**. The client stores the token in the Keychain under a per-server key
+(`authJWT_<serverId>`, see above) via `APIClient.setAuthToken()`. `APIClient.rawRequest()`
+injects the header automatically on every request.
 
 ### Session lifecycle (`SessionStore`)
 
 ```
 App launch
   └─ bootstrap()
-       ├─ no server URL → phase = .needsServer
-       ├─ cached user found → phase = .authenticated (immediate), then refreshUser()
+       ├─ no server selected → phase = .needsServer
+       ├─ cached user found (for this server) → phase = .authenticated (immediate), then refreshUser()
        └─ no cached user  → refreshUser()
 
 refreshUser()
