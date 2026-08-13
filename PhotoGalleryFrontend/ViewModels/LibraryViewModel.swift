@@ -17,6 +17,13 @@ final class LibraryViewModel {
     func load(userId: String) async {
         isLoading = true
         errorMessage = nil
+        // Clear the previous selection up front — matters when this is re-called after
+        // switching servers, so the old server's library/folder names don't linger on
+        // screen while the new fetch is still in flight.
+        libraries = []
+        selectedLibrary = nil
+        folders = []
+        selectedFolder = nil
         defer { isLoading = false }
         do {
             libraries = try await api.libraries(userId: userId)

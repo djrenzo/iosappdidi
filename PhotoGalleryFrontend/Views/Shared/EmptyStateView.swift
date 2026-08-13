@@ -22,5 +22,10 @@ struct EmptyStateView: View {
                 .padding(.horizontal, 32)
         }
         .padding(.top, 60)
+        // Without this, the VStack only claims its own narrow intrinsic width inside the
+        // enclosing ScrollView (unlike the populated LazyVGrid case, which claims full width
+        // to lay out columns) — leaving the margins on either side uncovered by the screen's
+        // intended background color.
+        .frame(maxWidth: .infinity)
     }
 }
