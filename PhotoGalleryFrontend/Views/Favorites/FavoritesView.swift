@@ -27,7 +27,14 @@ struct FavoritesView: View {
             }
             .background(Theme.background)
             .navigationTitle("Favorites")
-            .task { library.selectedLibrary.map { grid.configure(library: $0, folder: nil) } }
+            .onAppear {
+                guard let lib = library.selectedLibrary else { return }
+                // Re-fetch every time this tab becomes visible so favorites toggled
+                // elsewhere (e.g. the Gallery tab, which owns its own copy of the grid) show up.
+                if !grid.configure(library: lib, folder: nil) {
+                    Task { await grid.reload() }
+                }
+            }
             .onChange(of: library.selectedLibrary) { _, new in grid.configure(library: new, folder: nil) }
             .fullScreenCover(item: $selectedPhoto) { photo in
                 PhotoDetailPagerView(photos: grid.photos, startPhoto: photo, onFavoriteToggled: { p in

@@ -10,6 +10,7 @@ struct PhotoDetailPagerView: View {
     @State private var detailVM = PhotoDetailViewModel()
     @State private var showTagEditor = false
     @State private var showInfo = false
+    @State private var dismissProgress: CGFloat = 0
 
     init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void) {
         self.photos = photos
@@ -23,14 +24,23 @@ struct PhotoDetailPagerView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+                .opacity(1 - Double(dismissProgress) * 0.6)
             TabView(selection: $currentId) {
                 ForEach(photos) { photo in
-                    ZoomableImageView(path: photo.previewUrl)
-                        .tag(photo.id)
+                    ZoomableImageView(
+                        path: photo.previewUrl,
+                        thumbnailPath: photo.thumbUrl,
+                        onDismissProgress: { dismissProgress = $0 },
+                        onDismiss: { dismiss() }
+                    )
+                    .tag(photo.id)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .task(id: currentId) { await detailVM.load(id: currentId) }
+            .task(id: currentId) {
+                dismissProgress = 0
+                await detailVM.load(id: currentId)
+            }
 
             VStack {
                 topBar
@@ -38,6 +48,7 @@ struct PhotoDetailPagerView: View {
                 if showInfo { infoPanel }
                 bottomBar
             }
+            .opacity(max(0, 1 - Double(dismissProgress) * 2))
         }
         .sheet(isPresented: $showTagEditor) { TagEditorSheet(viewModel: detailVM) }
         .preferredColorScheme(.dark)

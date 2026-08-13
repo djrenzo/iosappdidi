@@ -5,6 +5,10 @@ import SwiftUI
 struct AsyncPhotoImage<Placeholder: View>: View {
     let path: String
     var contentMode: ContentMode = .fill
+    /// Shown immediately, with no fade-in, while `path` loads — then crossfaded away from
+    /// once it resolves. Pass an already-cached lower-res image (e.g. a thumbnail) to avoid
+    /// ever showing a blank/loading state for content the user has already seen.
+    var placeholderImage: UIImage? = nil
     @ViewBuilder var placeholder: () -> Placeholder
     @State private var uiImage: UIImage?
     @State private var failed = false
@@ -25,30 +29,32 @@ struct AsyncPhotoImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        .animation(.easeOut(duration: 0.2), value: uiImage != nil)
         .task(id: path) { await loadImage() }
     }
 
     @MainActor
     private func loadImage() async {
-        uiImage = nil
         failed = false
+        uiImage = placeholderImage
         guard let url = APIClient.shared.absoluteURL(forPath: path) else {
-            failed = true
+            if uiImage == nil { failed = true }
             return
         }
         let key = url.absoluteString
         if let cached = ImageCache.shared.image(for: key) {
-            uiImage = cached
+            withAnimation(.easeOut(duration: 0.25)) { uiImage = cached }
             return
         }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = UIImage(data: data) else { failed = true; return }
+            guard let image = UIImage(data: data) else {
+                if uiImage == nil { failed = true }
+                return
+            }
             ImageCache.shared.store(image, for: key)
-            uiImage = image
+            withAnimation(.easeOut(duration: 0.25)) { uiImage = image }
         } catch {
-            if !Task.isCancelled { failed = true }
+            if !Task.isCancelled && uiImage == nil { failed = true }
         }
     }
 }

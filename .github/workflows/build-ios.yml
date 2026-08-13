@@ -10,11 +10,11 @@ on:
       app_name:
         description: "App display name"
         required: true
-        default: "Photo Gallery"
+        default: "Aperture"
       bundle_id:
         description: "Bundle identifier (e.g. com.example.mygallery)"
         required: true
-        default: "com.superapp.photogalleryfrontendm6sa0"
+        default: "com.djrenzo.Aperture"
 
 permissions:
   contents: write

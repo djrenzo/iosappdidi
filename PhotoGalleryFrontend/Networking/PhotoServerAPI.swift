@@ -94,6 +94,11 @@ struct PhotoServerAPI {
     func addPhotos(albumId: Int, photoIds: [String]) async throws {
         try await client.requestVoid(path: "/api/albums/\(albumId)/photos", method: "POST", body: AddPhotosBody(photoIds: photoIds))
     }
+
+    /// Requires a matching `DELETE /api/albums/:id/photos` route on the backend (body: { photoIds }) — not present as of the last server sync.
+    func removePhotos(albumId: Int, photoIds: [String]) async throws {
+        try await client.requestVoid(path: "/api/albums/\(albumId)/photos", method: "DELETE", body: AddPhotosBody(photoIds: photoIds))
+    }
 }
 
 private struct LoginBody: Encodable { let name: String; let password: String }

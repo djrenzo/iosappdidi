@@ -80,4 +80,15 @@ final class AlbumDetailViewModel {
             errorMessage = error.localizedDescription
         }
     }
+
+    func removePhotos(_ ids: Set<String>, from albumId: Int) async -> Bool {
+        do {
+            try await api.removePhotos(albumId: albumId, photoIds: Array(ids))
+            photos.removeAll { ids.contains($0.id) }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
 }

@@ -27,7 +27,15 @@ struct GalleryView: View {
             .background(Theme.background)
             .navigationTitle("Gallery")
             .toolbar { toolbarContent }
-            .task { library.selectedLibrary.map { grid.configure(library: $0, folder: library.selectedFolder) } }
+            .toolbar(selectionMode ? .hidden : .visible, for: .tabBar)
+            .onAppear {
+                guard let lib = library.selectedLibrary else { return }
+                // Re-fetch every time this tab becomes visible so favorites toggled
+                // elsewhere (e.g. the Favorites tab, which owns its own copy of the grid) show up.
+                if !grid.configure(library: lib, folder: library.selectedFolder) {
+                    Task { await grid.reload() }
+                }
+            }
             .onChange(of: library.selectedLibrary) { _, new in grid.configure(library: new, folder: library.selectedFolder) }
             .onChange(of: library.selectedFolder) { _, new in grid.configure(library: library.selectedLibrary, folder: new) }
             .fullScreenCover(item: $selectedPhoto) { photo in

@@ -10,9 +10,7 @@ struct ProfileView: View {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Theme.accent)
+                        AvatarView(avatarData: session.currentUser?.avatarData, size: 48)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(session.currentUser?.name ?? "Unknown")
                                 .font(.headline)

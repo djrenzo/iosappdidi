@@ -44,11 +44,15 @@ final class PhotoGridViewModel {
 
     var hasMore: Bool { photos.count < total }
 
-    func configure(library: String?, folder: String?) {
-        guard library != self.library || folder != self.folder else { return }
+    /// Returns `true` if the selection actually changed (and a reload was queued),
+    /// so callers can force a reload themselves when it didn't.
+    @discardableResult
+    func configure(library: String?, folder: String?) -> Bool {
+        guard library != self.library || folder != self.folder else { return false }
         self.library = library
         self.folder = folder
         Task { await reload() }
+        return true
     }
 
     func reload() async {
@@ -88,14 +92,17 @@ final class PhotoGridViewModel {
     }
 
     func toggleFavorite(_ photo: Photo) async {
-        guard let index = photos.firstIndex(of: photo) else { return }
-        let newValue = !photo.favorite
-        photos[index] = Photo(id: photo.id, filename: photo.filename, db: photo.db, folder: photo.folder,
-                               width: photo.width, height: photo.height, takenAt: photo.takenAt, favorite: newValue,
-                               thumbReady: photo.thumbReady, thumbError: photo.thumbError, thumbUrl: photo.thumbUrl,
-                               previewUrl: photo.previewUrl, originalUrl: photo.originalUrl)
+        // Look up by id and flip the grid's own current value, not `photo`'s — the caller
+        // (e.g. the detail pager) may be holding a stale snapshot from before an earlier toggle.
+        guard let index = photos.firstIndex(where: { $0.id == photo.id }) else { return }
+        let current = photos[index]
+        let newValue = !current.favorite
+        photos[index] = Photo(id: current.id, filename: current.filename, db: current.db, folder: current.folder,
+                               width: current.width, height: current.height, takenAt: current.takenAt, favorite: newValue,
+                               thumbReady: current.thumbReady, thumbError: current.thumbError, thumbUrl: current.thumbUrl,
+                               previewUrl: current.previewUrl, originalUrl: current.originalUrl)
         do {
-            try await api.setFavorite(id: photo.id, favorite: newValue)
+            try await api.setFavorite(id: current.id, favorite: newValue)
             if favoriteOnly && !newValue {
                 photos.remove(at: index)
                 total -= 1
