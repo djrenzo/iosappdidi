@@ -2,8 +2,16 @@ import SwiftUI
 
 struct ProfileView: View {
     var session: SessionStore
+    var library: LibraryViewModel
     @State private var showEdit = false
     @State private var showPassword = false
+
+    private var librarySelection: Binding<String> {
+        Binding(
+            get: { library.selectedLibrary ?? library.libraries.first ?? "" },
+            set: { newValue in Task { await library.selectLibrary(newValue) } }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,6 +33,23 @@ struct ProfileView: View {
                 Section {
                     Button("Edit Profile") { showEdit = true }
                     Button("Change Password") { showPassword = true }
+                }
+                if !library.libraries.isEmpty {
+                    Section("Library") {
+                        if library.libraries.count > 1 {
+                            Picker("Library", selection: librarySelection) {
+                                ForEach(library.libraries, id: \.self) { lib in
+                                    Text(lib).tag(lib)
+                                }
+                            }
+                        } else if let only = library.libraries.first {
+                            HStack {
+                                Text("Library")
+                                Spacer()
+                                Text(only).foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                    }
                 }
                 Section("Storage") {
                     Button("Clear Image Cache", role: .destructive) {

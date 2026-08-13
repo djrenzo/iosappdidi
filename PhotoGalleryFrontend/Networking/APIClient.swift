@@ -96,11 +96,17 @@ final class APIClient: @unchecked Sendable {
         guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
+        // Percent-encode every query value ourselves and assign percentEncodedQueryItems
+        // directly. URLQueryItem's plain `queryItems` setter deliberately leaves characters
+        // like "+", "&", "=" unescaped (Apple's docs: it can't tell delimiter from data), and
+        // an unescaped "+" gets silently decoded back to a space by the server's standard
+        // x-www-form-urlencoded query parser — corrupting values like folder names that
+        // contain a literal "+" (e.g. "2015/Amerika + Aruba 2015").
         let items = query.compactMap { key, value -> URLQueryItem? in
             guard let value else { return nil }
-            return URLQueryItem(name: key, value: value)
+            return URLQueryItem(name: key.percentEncodedForQueryComponent(), value: value.percentEncodedForQueryComponent())
         }
-        if !items.isEmpty { components.queryItems = items }
+        if !items.isEmpty { components.percentEncodedQueryItems = items }
         guard let url = components.url else { throw APIError.invalidURL }
 
         var request = URLRequest(url: url)
@@ -121,6 +127,16 @@ final class APIClient: @unchecked Sendable {
             throw APIError.server(status: http.statusCode, message: message?.error)
         }
         return data
+    }
+}
+
+private extension String {
+    /// RFC 3986 "unreserved" characters only — everything else (including "+", "&", "=") is
+    /// percent-encoded, so there's no ambiguity left for a server-side parser to misread.
+    func percentEncodedForQueryComponent() -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
     }
 }
 

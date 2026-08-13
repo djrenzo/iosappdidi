@@ -18,6 +18,14 @@ Section refs point there for full detail.
       in Swift, so the decode throws right after the album was actually created. Fix on the
       backend — return the inserted row and declare `created_at`/`owner_id` in the schema — or
       make `Album.createdAt` optional in Swift. (spec §7.1)
+- [x] **Folder/tag/library names containing `+` (or `&`, `=`) silently failed to filter.**
+      `URLQueryItem`'s plain `queryItems` setter deliberately leaves those characters unescaped
+      (Apple's own docs note it can't tell delimiter from data), and an unescaped `+` gets
+      decoded back to a space by the server's standard query parser — so a folder like
+      "2015/Amerika + Aruba 2015" arrived at the backend as "2015/Amerika   Aruba 2015" and never
+      matched, silently returning zero photos. Fixed in `APIClient.rawRequest` by percent-encoding
+      every query value ourselves (RFC 3986 unreserved characters only) and assigning
+      `percentEncodedQueryItems` directly instead.
 - [ ] **`allowedFolders` vs `folders` mismatch.** Backend sends `allowedFolders`; `User.swift`
       decodes `folders`, so `User.folders` is always `nil`. Rename one side. (spec §7.2)
 - [ ] **Possible double-encoding in `removeTag`.** `PhotoServerAPI.removeTag` percent-encodes the
@@ -62,12 +70,11 @@ Section refs point there for full detail.
 ## Missing endpoints
 
 - [ ] `GET /api/tags` (optionally `?library=`) — needed for tag autocomplete / browse-by-tag.
-- [ ] **`DELETE /api/albums/:id/photos`, body `{ photoIds: [string] }`.** The app now has a
-      "Select Photos" / "Remove N from Album" flow in `AlbumDetailView` that calls
-      `PhotoServerAPI.removePhotos(albumId:photoIds:)` against this route — it 404s until the
-      backend adds it. Mirror `POST /api/albums/:id/photos`: delete matching
-      `(album_id, photo_id)` rows from `album_photos`, return `{ ok: true }`, and (per §7.6)
-      restrict to the album's owner.
+- [x] **`DELETE /api/albums/:id/photos`, body `{ photoIds: [string] }`.** Added on the backend —
+      the app's "Select Photos" / "Remove N from Album" flow in `AlbumDetailView`
+      (`PhotoServerAPI.removePhotos(albumId:photoIds:)`) is now live end-to-end. Worth a quick
+      on-device check that it's actually scoped to the album's owner per §7.6, since that
+      restriction isn't visible from the client side.
 - [ ] `PATCH /api/albums/:id` accepting `name` — album rename.
 - [ ] **`limit` param on `GET /api/albums/:id/photos`** (e.g. `?limit=4`). `AlbumCard` now
       renders a 4-thumbnail collage cover (client-side, see `AlbumListView.AlbumCoverView`), but

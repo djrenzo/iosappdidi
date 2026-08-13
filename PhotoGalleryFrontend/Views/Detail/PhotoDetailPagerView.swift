@@ -24,15 +24,28 @@ struct PhotoDetailPagerView: View {
 
     var body: some View {
         ZStack {
+            // Must reach fully transparent (not just dimmed) by dismissProgress == 1 — the
+            // dismiss gesture forces progress to 1 right as it triggers dismiss(), and anything
+            // still visible here at that instant gets caught in the fullScreenCover's own
+            // system dismiss transition, showing up as a separate black backdrop sliding away
+            // after the drag has already finished.
             Color.black.ignoresSafeArea()
-                .opacity(1 - Double(dismissProgress) * 0.6)
+                .opacity(1 - Double(dismissProgress))
             TabView(selection: $currentId) {
                 ForEach(photos) { photo in
                     ZoomableImageView(
                         path: photo.previewUrl,
                         thumbnailPath: photo.thumbUrl,
                         onDismissProgress: { dismissProgress = $0 },
-                        onDismiss: { dismiss() }
+                        onDismiss: {
+                            // The drag already animated the photo off-screen interactively —
+                            // letting the fullScreenCover *also* run its own default dismiss
+                            // transition on top just replays a second, redundant animation and
+                            // keeps the gallery underneath non-interactive until it finishes.
+                            withTransaction(Transaction(animation: nil)) {
+                                dismiss()
+                            }
+                        }
                     )
                     .tag(photo.id)
                 }

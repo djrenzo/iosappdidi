@@ -12,7 +12,7 @@ struct MainTabView: View {
                 .tabItem { Label("Favorites", systemImage: "heart.fill") }
             AlbumListView(session: session, library: library)
                 .tabItem { Label("Albums", systemImage: "rectangle.stack.fill") }
-            ProfileView(session: session)
+            ProfileView(session: session, library: library)
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
         .tint(Theme.accent)

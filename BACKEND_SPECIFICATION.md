@@ -366,6 +366,17 @@ because nothing writes `position`. No share/ownership check.
 unknown album ids and unknown photo ids are indistinguishable from success, and there is no
 per-id result. No ownership check.
 
+#### `DELETE /api/albums/:id/photos` ✅
+```jsonc
+{ "photoIds": ["9f3a…", "b71c…"] }   // → { ok: true }
+```
+Added after this doc's first pass (§8 originally listed it as missing) to back
+`AlbumDetailView`'s "Select Photos" / "Remove N from Album" flow
+(`PhotoServerAPI.removePhotos(albumId:photoIds:)`). Exact semantics (idempotency, per-id result,
+ownership scoping) weren't re-verified against the implementation — worth confirming it matches
+`POST /api/albums/:id/photos`'s behavior above, particularly whether it's restricted to the
+album's owner per §7.6.
+
 #### The `Album` object
 ```jsonc
 { "id": 12, "name": "Summer", "created_at": "2024-07-14 10:22:31",
@@ -508,10 +519,9 @@ Steps 1–2 are breaking changes for the client and should ship together with an
 | Missing | Unblocks |
 |---|---|
 | `GET /api/tags` (optionally `?library=`) | tag autocomplete in `TagEditorSheet`, browse-by-tag |
-| `DELETE /api/albums/:id/photos` | removing a photo from an album (no UI path today) |
 | `PATCH /api/albums/:id` accepting `name` | album rename |
 | `PUT /api/albums/:id/order` | using the `position` column |
-| album cover / photo count in `GET /api/albums` | `AlbumCard` renders a static placeholder icon and no count |
+| `limit` param on `GET /api/albums/:id/photos` (or a cover/count field on `GET /api/albums`) | `AlbumCard` now builds its 4-thumbnail collage cover client-side by fetching each album's *entire* photo list just to keep the first 4 — fine for small albums, wasteful for large ones |
 | `GET /api/photos?q=` full-text search over filename/folder/tags | a search UI |
 | `GET /api/stats` (counts, date range, per-library totals) | a library overview screen |
 | per-user favorites (§7.3) | a correct Favorites tab |
