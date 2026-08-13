@@ -42,7 +42,10 @@ struct AddToAlbumSheet: View {
                     Button { showCreate = true } label: { Image(systemName: "plus") }
                 }
             }
-            .task { await viewModel.load() }
+            .task {
+                guard let userId = session.currentUser?.id else { return }
+                await viewModel.load(userId: userId)
+            }
             .sheet(isPresented: $showCreate) {
                 CreateAlbumSheet(session: session, viewModel: viewModel)
             }
