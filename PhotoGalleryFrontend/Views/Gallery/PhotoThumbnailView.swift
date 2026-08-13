@@ -1,0 +1,41 @@
+import SwiftUI
+
+struct PhotoThumbnailView: View {
+    let photo: Photo
+    var isSelected: Bool = false
+    var selectionMode: Bool = false
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AsyncPhotoImage(path: photo.thumbUrl) {
+                Rectangle().fill(Theme.surfaceElevated)
+            }
+            .clipped()
+            .aspectRatio(1, contentMode: .fit)
+
+            if photo.favorite {
+                Image(systemName: "heart.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(Theme.favorite, in: Circle())
+                    .padding(6)
+            }
+
+            if selectionMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Theme.accent : .white)
+                    .background(Circle().fill(isSelected ? .white : .black.opacity(0.3)).padding(1))
+                    .padding(6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+        }
+        .background(Theme.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? Theme.accent : .clear, lineWidth: 3)
+        )
+    }
+}

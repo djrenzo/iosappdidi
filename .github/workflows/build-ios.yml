@@ -1,0 +1,49 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build archive
+        run: |
+          xcodebuild \
+            -project PhotoGalleryFrontend.xcodeproj \
+            -scheme PhotoGalleryFrontend \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/PhotoGalleryFrontend.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create IPA
+        run: |
+          mkdir -p build/Payload
+
+          cp -R \
+            build/PhotoGalleryFrontend.xcarchive/Products/Applications/PhotoGalleryFrontend.app \
+            build/Payload/
+
+          cd build
+          zip -r PhotoGalleryFrontend.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoGalleryFrontend-IPA
+          path: build/PhotoGalleryFrontend.ipa
