@@ -10,12 +10,12 @@ final class AlbumsViewModel {
 
     private let api = PhotoServerAPI()
 
-    func load() async {
+    func load(userId: String) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            albums = try await api.albums().sorted { $0.createdAt > $1.createdAt }
+            albums = try await api.albums(userId: userId).sorted { $0.createdAt > $1.createdAt }
         } catch {
             errorMessage = error.localizedDescription
         }

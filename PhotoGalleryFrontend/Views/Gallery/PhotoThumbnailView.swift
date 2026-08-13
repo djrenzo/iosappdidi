@@ -10,8 +10,8 @@ struct PhotoThumbnailView: View {
             AsyncPhotoImage(path: photo.thumbUrl) {
                 Rectangle().fill(Theme.surfaceElevated)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
-            .aspectRatio(1, contentMode: .fit)
 
             if photo.favorite {
                 Image(systemName: "heart.fill")
@@ -31,6 +31,7 @@ struct PhotoThumbnailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
+        .aspectRatio(1, contentMode: .fit)
         .background(Theme.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(

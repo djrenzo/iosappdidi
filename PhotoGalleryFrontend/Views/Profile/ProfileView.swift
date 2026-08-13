@@ -28,6 +28,11 @@ struct ProfileView: View {
                     Button("Edit Profile") { showEdit = true }
                     Button("Change Password") { showPassword = true }
                 }
+                Section("Storage") {
+                    Button("Clear Image Cache", role: .destructive) {
+                        ImageCache.shared.clear()
+                    }
+                }
                 Section {
                     Button("Sign Out", role: .destructive) { session.logout() }
                 }

@@ -2,6 +2,14 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -42,8 +50,10 @@ jobs:
           cd build
           zip -r PhotoGalleryFrontend.ipa Payload
 
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: PhotoGalleryFrontend-IPA
-          path: build/PhotoGalleryFrontend.ipa
+          tag_name: v${{ inputs.version }}
+          name: PhotoGalleryFrontend v${{ inputs.version }}
+          generate_release_notes: true
+          files: build/PhotoGalleryFrontend.ipa

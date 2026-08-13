@@ -12,6 +12,7 @@
 		30669421A441FA43BDB58B62 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C350C8EA9B6ED47A762408B3 /* RootView.swift */; };
 		31062076564CA02F243B7224 /* TagEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989138BDBB5B5549B173D5CE /* TagEditorSheet.swift */; };
 		3219ABD95B1B5DE543E8ECBC /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF752F4F69A43DC3F7C94A2 /* APIClient.swift */; };
+		AA1B2C3D4E5F6A7B8C9D0E1F /* ImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1B2C3D4E5F6A7B8C9D0E1F /* ImageCache.swift */; };
 		3644CEAAFE5945F0BF9FA2BC /* AlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7869159DD2852FE038FE5D3 /* AlbumDetailView.swift */; };
 		3B25503F751702C5C4CF4E32 /* PhotoGalleryFrontendApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D096412F4923EF7AD724EFD /* PhotoGalleryFrontendApp.swift */; };
 		4995E791162B1CEE39E745EE /* EditProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C24262F60F0B46A5751BA4 /* EditProfileSheet.swift */; };
@@ -58,6 +59,7 @@
 		6BA5B845128E8ED451543BDC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6E429B65F3F295FB776A4C1E /* PhotoDetailPagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDetailPagerView.swift; sourceTree = "<group>"; };
 		6EF752F4F69A43DC3F7C94A2 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		BB1B2C3D4E5F6A7B8C9D0E1F /* ImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCache.swift; sourceTree = "<group>"; };
 		7114917D84B2839090A3B776 /* ChangePasswordSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangePasswordSheet.swift; sourceTree = "<group>"; };
 		718F08CB23233AF8AE817957 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		76722DA643906ED050FF4C96 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
@@ -215,6 +217,7 @@
 			isa = PBXGroup;
 			children = (
 				6EF752F4F69A43DC3F7C94A2 /* APIClient.swift */,
+				BB1B2C3D4E5F6A7B8C9D0E1F /* ImageCache.swift */,
 				79DC2CA446161BFB199B58D9 /* KeychainHelper.swift */,
 				F9536ECECD96760821F977F4 /* PhotoServerAPI.swift */,
 			);
@@ -324,6 +327,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3219ABD95B1B5DE543E8ECBC /* APIClient.swift in Sources */,
+				AA1B2C3D4E5F6A7B8C9D0E1F /* ImageCache.swift in Sources */,
 				C60FD849361A4235EFE2BB7D /* AddToAlbumSheet.swift in Sources */,
 				CE10909084716380F1498070 /* Album.swift in Sources */,
 				3644CEAAFE5945F0BF9FA2BC /* AlbumDetailView.swift in Sources */,

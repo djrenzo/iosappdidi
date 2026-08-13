@@ -71,8 +71,8 @@ struct PhotoServerAPI {
 
     // MARK: Albums
 
-    func albums() async throws -> [Album] {
-        try await client.request(path: "/api/albums")
+    func albums(userId: String) async throws -> [Album] {
+        try await client.request(path: "/api/albums", query: ["user_id": userId])
     }
 
     func createAlbum(name: String, userId: String, tag: String? = nil, shared: Bool = false) async throws -> Album {
