@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 
-/// App-wide session/auth state. Restores a cached user on launch and
-/// re-validates against `/api/auth/me` since the real session lives in a
-/// server-issued cookie, not something this app can inspect directly.
+/// App-wide session/auth state. Restores the JWT token from Keychain on launch
+/// and re-validates against `/api/auth/me` to refresh user data.
 @MainActor
 @Observable
 final class SessionStore {
@@ -29,6 +28,7 @@ final class SessionStore {
         if let data = KeychainHelper.get(key: cachedUserKey)?.data(using: .utf8),
            let cached = try? JSONDecoder().decode(User.self, from: data) {
             currentUser = cached
+            phase = .authenticated  // show app immediately; refreshUser validates in the background
         }
         await refreshUser()
     }
@@ -39,9 +39,15 @@ final class SessionStore {
             currentUser = user
             cache(user)
             phase = .authenticated
-        } catch {
+        } catch APIError.server(let status, _) where status == 401 || status == 403 {
+            // Token expired or revoked — clear credentials and ask to log in
+            APIClient.shared.setAuthToken(nil)
             currentUser = nil
+            KeychainHelper.remove(key: cachedUserKey)
             phase = .needsLogin
+        } catch {
+            // Network or transient error — keep existing state
+            if currentUser == nil { phase = .needsLogin }
         }
     }
 
@@ -53,9 +59,10 @@ final class SessionStore {
     func login(name: String, password: String) async {
         errorMessage = nil
         do {
-            let user = try await api.login(name: name, password: password)
-            currentUser = user
-            cache(user)
+            let response = try await api.login(name: name, password: password)
+            APIClient.shared.setAuthToken(response.token)
+            currentUser = response.user
+            cache(response.user)
             phase = .authenticated
         } catch {
             errorMessage = error.localizedDescription
@@ -65,9 +72,10 @@ final class SessionStore {
     func signup(name: String, password: String) async {
         errorMessage = nil
         do {
-            let user = try await api.signup(name: name, password: password)
-            currentUser = user
-            cache(user)
+            let response = try await api.signup(name: name, password: password)
+            APIClient.shared.setAuthToken(response.token)
+            currentUser = response.user
+            cache(response.user)
             phase = .authenticated
         } catch {
             errorMessage = error.localizedDescription
@@ -75,9 +83,9 @@ final class SessionStore {
     }
 
     func logout() {
+        APIClient.shared.setAuthToken(nil)
         currentUser = nil
         KeychainHelper.remove(key: cachedUserKey)
-        HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         phase = .needsLogin
     }
 

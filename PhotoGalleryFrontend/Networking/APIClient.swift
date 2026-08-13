@@ -20,9 +20,8 @@ enum APIError: LocalizedError {
     }
 }
 
-/// Thin async/await HTTP client for the Photo Server API. Auth relies on the
-/// server issuing a session cookie on login, which `URLSession.shared`
-/// persists automatically via the shared `HTTPCookieStorage`.
+/// Thin async/await HTTP client for the Photo Server API.
+/// Auth uses a JWT Bearer token returned on login and stored in the Keychain.
 final class APIClient: @unchecked Sendable {
     static let shared = APIClient()
 
@@ -32,6 +31,19 @@ final class APIClient: @unchecked Sendable {
     }()
 
     private let encoder = JSONEncoder()
+    private let tokenKey = "authJWT"
+
+    var authToken: String? {
+        KeychainHelper.get(key: tokenKey)
+    }
+
+    func setAuthToken(_ token: String?) {
+        if let token {
+            KeychainHelper.set(token, key: tokenKey)
+        } else {
+            KeychainHelper.remove(key: tokenKey)
+        }
+    }
 
     var baseURL: URL? {
         guard let raw = UserDefaults.standard.string(forKey: "serverBaseURL"), !raw.isEmpty else {
@@ -94,6 +106,9 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try encoder.encode(AnyEncodable(body))

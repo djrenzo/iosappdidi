@@ -6,11 +6,11 @@ struct PhotoServerAPI {
 
     // MARK: Auth
 
-    func login(name: String, password: String) async throws -> User {
+    func login(name: String, password: String) async throws -> AuthResponse {
         try await client.request(path: "/api/auth/login", method: "POST", body: LoginBody(name: name, password: password))
     }
 
-    func signup(name: String, password: String) async throws -> User {
+    func signup(name: String, password: String) async throws -> AuthResponse {
         try await client.request(path: "/api/auth/signup", method: "POST", body: LoginBody(name: name, password: password))
     }
 
@@ -106,3 +106,9 @@ private struct CreateAlbumBody: Encodable { let name: String; let tag: String?; 
 }
 private struct SharedBody: Encodable { let shared: Int }
 private struct AddPhotosBody: Encodable { let photoIds: [String] }
+
+/// The server's login/signup response: JWT token + user object.
+struct AuthResponse: Decodable {
+    let token: String
+    let user: User
+}
