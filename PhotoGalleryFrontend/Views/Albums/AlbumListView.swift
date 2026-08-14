@@ -20,7 +20,7 @@ struct AlbumListView: View {
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(viewModel.albums) { album in
                             NavigationLink {
-                                AlbumDetailView(album: album, viewModel: viewModel)
+                                AlbumDetailView(album: album, viewModel: viewModel, session: session)
                             } label: {
                                 AlbumCard(album: album)
                             }

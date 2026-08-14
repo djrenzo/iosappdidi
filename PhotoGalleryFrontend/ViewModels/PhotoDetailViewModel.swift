@@ -12,23 +12,23 @@ final class PhotoDetailViewModel {
 
     private let api = PhotoServerAPI()
 
-    func load(id: String) async {
+    func load(id: String, userId: String?) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            detail = try await api.photoDetail(id: id)
+            detail = try await api.photoDetail(id: id, userId: userId)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func toggleFavorite() async {
-        guard let detail else { return }
+    func toggleFavorite(userId: String?) async {
+        guard let detail, let userId else { return }
         let newValue = !detail.favorite
         applyFavorite(newValue)
         do {
-            try await api.setFavorite(id: detail.id, favorite: newValue)
+            try await api.setFavorite(id: detail.id, favorite: newValue, userId: userId)
         } catch {
             applyFavorite(!newValue)
             errorMessage = error.localizedDescription

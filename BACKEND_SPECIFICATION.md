@@ -275,6 +275,11 @@ name from any caller — the `user_folders` grant is not consulted.
 
 ### 5.4 Photos
 
+Favorites moved off a shared column on `photos` onto a per-user `user_favorites` join table
+(photo_id, user_id). Every read endpoint below takes an *optional* `user_id` to resolve each
+photo's `favorite` flag for that specific user — omit it and every photo comes back with
+`favorite: false`, since there's no longer a single global value to fall back to.
+
 #### `GET /api/photos` ⚠️
 | Query | Type | Default | Notes |
 |---|---|---|---|
@@ -284,24 +289,35 @@ name from any caller — the `user_folders` grant is not consulted.
 | `offset` | int ≥ 0 | 0 | |
 | `sort` | `taken_at`\|`filename`\|`size_bytes` | `taken_at` | whitelist-checked twice |
 | `order` | `asc`\|`desc` | `desc` | |
-| `favorite` | boolean | — | ⚠️ **presence-based**: any value, including `false`, filters to favorites only |
 | `tag` | string | — | exact tag name; switches to a 3-way join |
+| `user_id` | string | — | optional; resolves `favorite` per-user (see above) |
 
 → `{ total, items: Photo[] }` where `total` is the count **for the same filter**, not the page.
 
 `additionalProperties: false` — an unknown query key is a 400. The app relies on `total` for its
-"N Photos" header and for `hasMore` paging.
+"N Photos" header and for `hasMore` paging. The old `favorite=true` filter param is gone —
+favoriting is handled by the dedicated endpoint below instead.
+
+#### `GET /api/favorites?user_id=<id>` ✅
+→ `Photo[]` — every photo the given user has favorited, ordered newest-taken first. **Not
+library-scoped** (spans every library the user can see) and **not paginated** — always returns
+the complete list in one response, unlike `GET /api/photos`. `user_id` is required.
 
 #### `GET /api/photos/:id` ✅
-→ `Photo` + `{ cameraMake, cameraModel, tags: string[] }`, or `404 {"error":"not found"}`.
-Not scoped by library or user: any photo id is readable by anyone.
+| Query | Type | Notes |
+|---|---|---|
+| `user_id` | string | optional; resolves `favorite` per-user |
 
-#### `PATCH /api/photos/:id/favorite` ⚠️
+→ `Photo` + `{ cameraMake, cameraModel, tags: string[] }`, or `404 {"error":"not found"}`.
+Not scoped by library or user for *access* — any photo id is readable by anyone regardless of
+`user_id`; that param only affects the returned `favorite` value.
+
+#### `PATCH /api/photos/:id/favorite` ✅
 ```jsonc
-{ "favorite": true }   // → { ok: true } | 404
+{ "favorite": true, "user_id": "uuid" }   // → { ok: true } | 404
 ```
-Writes `photos.favorite`. **Shared by every user** — one user favouriting a photo changes the
-Favorites tab for all of them.
+`user_id` is now **required**. Inserts/deletes the `(photo_id, user_id)` row in `user_favorites`
+rather than writing a column on `photos` — favoriting is per-user.
 
 #### The `Photo` object
 ```jsonc
@@ -316,8 +332,10 @@ Favorites tab for all of them.
   "originalUrl": "/originals/family/2024/trip/IMG_0042.jpg"
 }
 ```
-`size_bytes` is sortable but absent from the payload. `takenAt` is parsed client-side with
-`ISO8601DateFormatter` — fractional seconds or a missing `Z` will fail to parse (silently, to `nil`).
+`favorite` reflects the requesting `user_id`'s own favorites now, not a shared value — see the
+note at the top of this section. `size_bytes` is sortable but absent from the payload. `takenAt`
+is parsed client-side with `ISO8601DateFormatter` — fractional seconds or a missing `Z` will fail
+to parse (silently, to `nil`).
 
 ### 5.5 Albums
 
@@ -329,17 +347,17 @@ Favorites tab for all of them.
 > `AddToAlbumSheet` — must pass `session.currentUser?.id` or the list comes back filtered to
 > shared albums only.
 
-#### `POST /api/albums` ⚠️ **broken for the iOS client**
+#### `POST /api/albums` ✅
 ```jsonc
 // body
 { "name": "Summer", "tag": "beach", "user_id": "uuid", "shared": 0 }
 // 200 — as actually serialized
-{ "id": 12, "name": "Summer", "tag": "beach", "shared": false }
+{ "id": 16, "name": "test", "created_at": "2026-08-14 08:03:39", "tag": null,
+  "owner_id": "e8442e19-2048-4bc0-9db0-4ec27b52df11", "shared": false }
 ```
-The handler also returns `owner_id`, but it is not in the response schema so it is stripped —
-and **`created_at` is neither returned nor declared**. The Swift `Album` model requires a
-non-optional `createdAt`, so decoding throws and `AlbumsViewModel.createAlbum` surfaces
-"Received an unexpected response from the server" *even though the album was created*. See §7.1.
+Fixed (was previously broken — see §7.1 history): the handler now re-selects and returns the
+inserted row, with the response schema declaring `created_at`/`owner_id` to match, so it's the
+same shape as each item in `GET /api/albums`. Matches `Album.swift`'s `CodingKeys` exactly.
 
 `shared` must be the integer `0` or `1` (a JSON boolean is rejected by the enum).
 
@@ -355,6 +373,7 @@ Cascade-deletes `album_photos` rows only if the FK is declared `ON DELETE CASCAD
 indexer schema; otherwise the membership rows are orphaned.
 
 #### `GET /api/albums/:id/photos` ⚠️
+Accepts an optional `user_id` (see §5.4) to resolve each photo's `favorite` per-user.
 → `Photo[]`, `missing = 0`, `ORDER BY album_photos.position ASC` — which is a no-op today
 because nothing writes `position`. No share/ownership check.
 
@@ -420,9 +439,9 @@ All require an admin token. **None of these are used by the iOS app** — there 
 | `LoginView` / `SignupView` | `POST /api/auth/login`, `/signup` |
 | `SessionStore.bootstrap` | `GET /api/auth/me` (401/403 ⇒ logout; network error ⇒ keep cache) |
 | `MainTabView` → `LibraryViewModel` | `GET /api/libraries`, `GET /api/folders` |
-| `GalleryView` | `GET /api/photos` (paged, 60/page), `PATCH …/favorite` |
-| `FavoritesView` | `GET /api/photos?favorite=true` |
-| `PhotoDetailPagerView` | `GET /api/photos/:id`, `PATCH …/favorite` |
+| `GalleryView` | `GET /api/photos` (paged, 60/page, `user_id` for favorite resolution), `PATCH …/favorite` |
+| `FavoritesView` | `GET /api/favorites?user_id=` (flat, not paginated, not library-scoped) |
+| `PhotoDetailPagerView` | `GET /api/photos/:id?user_id=`, `PATCH …/favorite` (body now requires `user_id`) |
 | `TagEditorSheet` | `POST /api/photos/:id/tags`, `DELETE /api/photos/:id/tags/:tag` |
 | `AlbumListView` / `AddToAlbumSheet` | `GET /api/albums?user_id=`, `POST /api/albums`, `POST /api/albums/:id/photos` |
 | `AlbumDetailView` | `GET /api/albums/:id/photos`, `PATCH /api/albums/:id`, `DELETE /api/albums/:id` |
@@ -435,12 +454,14 @@ All require an admin token. **None of these are used by the iOS app** — there 
 
 Ordered by impact. §7.1–7.2 are user-visible bugs; §7.3–7.6 are design/security.
 
-### 7.1 `POST /api/albums` omits `created_at` — album creation always reports failure
-The response schema declares only `id`, `name`, `tag`, `shared`. Swift's `Album` requires
-`created_at`, so `JSONDecoder` throws → `APIError.decoding` → the new album never appears in the
-list until the view is reloaded, and the user sees an error for an operation that succeeded.
+### 7.1 ✅ `POST /api/albums` omitted `created_at` — album creation always reported failure
+**Fixed.** The response schema previously declared only `id`, `name`, `tag`, `shared`; Swift's
+`Album` requires `created_at`, so `JSONDecoder` threw → `APIError.decoding` → the new album
+never appeared in the list until the view was reloaded, and the user saw an error for an
+operation that had actually succeeded.
 
-**Fix (backend, preferred):** return the inserted row and declare it fully.
+**Fix applied (backend):** return the inserted row and declare it fully — same shape as each
+item in `GET /api/albums`.
 ```js
 const result = db.prepare('INSERT INTO albums (name, tag, owner_id, shared) VALUES (?,?,?,?)')
                  .run(name, tag ?? null, user_id, sharedValue);
@@ -449,22 +470,22 @@ return db.prepare('SELECT * FROM albums WHERE id = ?').get(result.lastInsertRowi
 …with `created_at` and `owner_id` added to the response schema. **Fix (frontend alternative):**
 make `Album.createdAt` optional. Do one or the other, not neither.
 
-### 7.2 `allowedFolders` vs `folders`
-The backend emits `allowedFolders`; [User.swift](PhotoGalleryFrontend/Models/User.swift#L41)
-decodes `folders`, so `User.folders` is always `nil`. Harmless today — nothing reads it — but it
-blocks any client-side "which libraries can I see" UI. `nameKey` is likewise sent and ignored.
-Pick `allowedFolders` as canonical and fix the Swift `CodingKeys`.
+### 7.2 ✅ `allowedFolders` vs `folders`
+**Fixed (frontend).** The backend emits `allowedFolders`;
+[User.swift](PhotoGalleryFrontend/Models/User.swift#L13) previously decoded a `folders` key that
+never existed in the response, so `User.folders` was always `nil`. `CodingKeys` now maps
+`folders = "allowedFolders"`. `nameKey` is still sent and ignored — harmless, nothing reads it.
 
-### 7.3 Favorites and tags are global, not per-user
-`photos.favorite` is a column on the shared photo row. Every user sees, and overwrites, the same
-Favorites tab. The app presents this as personal. Proper fix is a `user_favorites(user_id,
-photo_id)` join table and a `favorite` flag computed per requesting user. Same argument applies
-to `photo_tags`.
+### 7.3 ✅ Favorites are now per-user (tags are still global)
+**Fixed, favorites half only.** `photos.favorite` is gone; favoriting is now a
+`user_favorites(user_id, photo_id)` join table, with `favorite` resolved per the requesting
+`user_id` on every read (§5.4). The client is fully updated to match. **`photo_tags` is
+unchanged** — tags are still global across all users, the other half of this gap.
 
-### 7.4 `favorite` is presence-based, not value-based
-`if (favorite !== undefined) clauses.push('p.favorite = 1')` — `?favorite=false` returns
-*favorites*. The client dodges this by sending the parameter only when `favoriteOnly` is true.
-Fix: `if (favorite === true)`, or accept `favorite=0` as "non-favorites only".
+### 7.4 ✅ `favorite` presence-based filtering — resolved by removal
+The old `?favorite=true` query param on `GET /api/photos` (`if (favorite !== undefined) ...` —
+`?favorite=false` incorrectly returned favorites) is gone entirely, superseded by the dedicated
+`GET /api/favorites` endpoint in §5.4. Nothing to fix — the buggy param no longer exists.
 
 ### 7.5 New self-signup users land in a dead end
 A non-first signup gets no `user_folders` rows, so `/api/libraries` returns `[]`, no library is

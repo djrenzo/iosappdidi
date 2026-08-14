@@ -11,7 +11,8 @@ struct User: Codable, Identifiable, Hashable {
     let folders: [String]?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, isAdmin, mustChangePassword, avatarData, folders
+        case id, name, isAdmin, mustChangePassword, avatarData
+        case folders = "allowedFolders"
         case user
     }
 

@@ -70,12 +70,12 @@ final class AlbumDetailViewModel {
 
     private let api = PhotoServerAPI()
 
-    func load(albumId: Int) async {
+    func load(albumId: Int, userId: String?) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            photos = try await api.albumPhotos(id: albumId)
+            photos = try await api.albumPhotos(id: albumId, userId: userId)
         } catch {
             errorMessage = error.localizedDescription
         }

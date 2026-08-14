@@ -39,7 +39,7 @@ struct PhotoServerAPI {
     // MARK: Photos
 
     func photos(library: String, folder: String? = nil, limit: Int = 60, offset: Int = 0,
-                sort: String = "taken_at", order: String = "desc", favorite: Bool? = nil, tag: String? = nil) async throws -> PhotoPage {
+                sort: String = "taken_at", order: String = "desc", tag: String? = nil, userId: String? = nil) async throws -> PhotoPage {
         try await client.request(path: "/api/photos", query: [
             "library": library,
             "folder": folder,
@@ -47,17 +47,24 @@ struct PhotoServerAPI {
             "offset": String(offset),
             "sort": sort,
             "order": order,
-            "favorite": favorite.map(String.init),
-            "tag": tag
+            "tag": tag,
+            "user_id": userId
         ])
     }
 
-    func photoDetail(id: String) async throws -> PhotoDetail {
-        try await client.request(path: "/api/photos/\(id)")
+    /// The user's favorited photos, newest-taken first. Not library-scoped — spans every
+    /// library the user can see. Unlike `/api/photos`, this isn't paginated: it always
+    /// returns the full list in one shot.
+    func favorites(userId: String) async throws -> [Photo] {
+        try await client.request(path: "/api/favorites", query: ["user_id": userId])
     }
 
-    func setFavorite(id: String, favorite: Bool) async throws {
-        try await client.requestVoid(path: "/api/photos/\(id)/favorite", method: "PATCH", body: FavoriteBody(favorite: favorite))
+    func photoDetail(id: String, userId: String? = nil) async throws -> PhotoDetail {
+        try await client.request(path: "/api/photos/\(id)", query: ["user_id": userId])
+    }
+
+    func setFavorite(id: String, favorite: Bool, userId: String) async throws {
+        try await client.requestVoid(path: "/api/photos/\(id)/favorite", method: "PATCH", body: FavoriteBody(favorite: favorite, userId: userId))
     }
 
     func addTag(id: String, tag: String) async throws {
@@ -87,8 +94,8 @@ struct PhotoServerAPI {
         try await client.requestVoid(path: "/api/albums/\(id)", method: "PATCH", body: SharedBody(shared: shared ? 1 : 0))
     }
 
-    func albumPhotos(id: Int) async throws -> [Photo] {
-        try await client.request(path: "/api/albums/\(id)/photos")
+    func albumPhotos(id: Int, userId: String? = nil) async throws -> [Photo] {
+        try await client.request(path: "/api/albums/\(id)/photos", query: ["user_id": userId])
     }
 
     func addPhotos(albumId: Int, photoIds: [String]) async throws {
@@ -104,7 +111,9 @@ struct PhotoServerAPI {
 private struct LoginBody: Encodable { let name: String; let password: String }
 private struct ProfileUpdateBody: Encodable { let name: String?; let avatarData: String? }
 private struct PasswordBody: Encodable { let currentPassword: String?; let newPassword: String }
-private struct FavoriteBody: Encodable { let favorite: Bool }
+private struct FavoriteBody: Encodable { let favorite: Bool; let userId: String
+    enum CodingKeys: String, CodingKey { case favorite; case userId = "user_id" }
+}
 private struct TagBody: Encodable { let tag: String }
 private struct CreateAlbumBody: Encodable { let name: String; let tag: String?; let userId: String; let shared: Int
     enum CodingKeys: String, CodingKey { case name, tag; case userId = "user_id"; case shared }

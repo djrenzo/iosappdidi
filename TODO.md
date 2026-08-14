@@ -13,11 +13,11 @@ Section refs point there for full detail.
       (2) Gallery and Favorites tabs each own a separate `PhotoGridViewModel` loaded once via
       `.task`, so a favorite toggled in one tab never appeared in the other until relaunch. Both
       views now reload `onAppear` (which SwiftUI fires on every tab reselect, not just the first).
-- [ ] **Album creation always shows an error.** `POST /api/albums` doesn't return `created_at`
-      (and its response schema would strip it even if it did). `Album.createdAt` is non-optional
-      in Swift, so the decode throws right after the album was actually created. Fix on the
-      backend — return the inserted row and declare `created_at`/`owner_id` in the schema — or
-      make `Album.createdAt` optional in Swift. (spec §7.1)
+- [x] **Album creation always shows an error.** Fixed on the backend — `POST /api/albums` now
+      returns the inserted row (including `created_at`/`owner_id`) with a matching response
+      schema, e.g. `{"id":16,"name":"test","created_at":"2026-08-14 08:03:39","tag":null,
+      "owner_id":"e8442e19-...","shared":false}` — matches `Album.swift`'s `CodingKeys` exactly,
+      no client changes needed. (spec §7.1)
 - [x] **Folder/tag/library names containing `+` (or `&`, `=`) silently failed to filter.**
       `URLQueryItem`'s plain `queryItems` setter deliberately leaves those characters unescaped
       (Apple's own docs note it can't tell delimiter from data), and an unescaped `+` gets
@@ -26,8 +26,9 @@ Section refs point there for full detail.
       matched, silently returning zero photos. Fixed in `APIClient.rawRequest` by percent-encoding
       every query value ourselves (RFC 3986 unreserved characters only) and assigning
       `percentEncodedQueryItems` directly instead.
-- [ ] **`allowedFolders` vs `folders` mismatch.** Backend sends `allowedFolders`; `User.swift`
-      decodes `folders`, so `User.folders` is always `nil`. Rename one side. (spec §7.2)
+- [x] **`allowedFolders` vs `folders` mismatch.** Backend sends `allowedFolders`; `User.swift`
+      decoded `folders`, so `User.folders` was always `nil`. Fixed on the Swift side:
+      `CodingKeys` now maps `folders = "allowedFolders"`. (spec §7.2)
 - [ ] **Possible double-encoding in `removeTag`.** `PhotoServerAPI.removeTag` percent-encodes the
       tag, then `APIClient`'s `appendingPathComponent`/`URLComponents` may encode again — tags
       with spaces or special characters could 404. Needs a device/simulator check.
@@ -52,10 +53,17 @@ Section refs point there for full detail.
 
 ## Design gaps
 
-- [ ] Make favorites and tags per-user instead of global columns on `photos` — right now one
-      user's Favorites tab is everyone's. (spec §7.3)
-- [ ] Fix `favorite` query filtering to be value-based, not presence-based
-      (`?favorite=false` currently returns favorites). (spec §7.4)
+- [x] **Favorites are now per-user.** Backend moved `favorite` off the shared `photos` column
+      onto a `user_favorites` join table: new `GET /api/favorites?user_id=` (flat array, newest-
+      taken first, not library-scoped), `PATCH /api/photos/:id/favorite` now requires `user_id`
+      in the body, and `GET /api/photos`, `GET /api/photos/:id`, `GET /api/albums/:id/photos` all
+      accept an optional `user_id` to resolve each photo's `favorite` flag per-user. Client fully
+      updated — `PhotoGridViewModel` branches between the paginated grid endpoint and the flat
+      favorites endpoint; `PhotoDetailViewModel`/`AlbumDetailViewModel` thread `userId` through.
+      **Tags are still global** — this only covers the favorites half of §7.3.
+- [x] `favorite=true` filter param on `GET /api/photos` removed (superseded by the dedicated
+      `/api/favorites` endpoint above) — the presence-vs-value bug from §7.4 no longer applies
+      since the param doesn't exist anymore.
 - [ ] Give new self-signup users either a default library grant, an invite/approval flow, or an
       admin UI — right now they land in a permanently empty gallery. (spec §7.5)
 - [ ] Write `album_photos.position` on insert (or drop the `ORDER BY position` pretence) — album

@@ -3,6 +3,7 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     var albumsViewModel: AlbumsViewModel
+    var session: SessionStore
     @State private var detailVM = AlbumDetailViewModel()
     @State private var selectedPhoto: Photo?
     @State private var isShared: Bool
@@ -13,9 +14,10 @@ struct AlbumDetailView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 108, maximum: 140), spacing: 8)]
 
-    init(album: Album, viewModel: AlbumsViewModel) {
+    init(album: Album, viewModel: AlbumsViewModel, session: SessionStore) {
         self.album = album
         self.albumsViewModel = viewModel
+        self.session = session
         _isShared = State(initialValue: album.shared ?? false)
     }
 
@@ -72,9 +74,9 @@ struct AlbumDetailView: View {
             }
         }
         .toolbar(selectionMode ? .hidden : .visible, for: .tabBar)
-        .task { await detailVM.load(albumId: album.id) }
+        .task { await detailVM.load(albumId: album.id, userId: session.currentUser?.id) }
         .fullScreenCover(item: $selectedPhoto) { photo in
-            PhotoDetailPagerView(photos: detailVM.photos, startPhoto: photo, onFavoriteToggled: { _ in })
+            PhotoDetailPagerView(photos: detailVM.photos, startPhoto: photo, onFavoriteToggled: { _ in }, userId: session.currentUser?.id)
         }
     }
 

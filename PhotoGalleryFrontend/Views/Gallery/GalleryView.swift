@@ -32,16 +32,16 @@ struct GalleryView: View {
                 guard let lib = library.selectedLibrary else { return }
                 // Re-fetch every time this tab becomes visible so favorites toggled
                 // elsewhere (e.g. the Favorites tab, which owns its own copy of the grid) show up.
-                if !grid.configure(library: lib, folder: library.selectedFolder) {
+                if !grid.configure(library: lib, folder: library.selectedFolder, userId: session.currentUser?.id) {
                     Task { await grid.reload() }
                 }
             }
-            .onChange(of: library.selectedLibrary) { _, new in grid.configure(library: new, folder: library.selectedFolder) }
-            .onChange(of: library.selectedFolder) { _, new in grid.configure(library: library.selectedLibrary, folder: new) }
+            .onChange(of: library.selectedLibrary) { _, new in grid.configure(library: new, folder: library.selectedFolder, userId: session.currentUser?.id) }
+            .onChange(of: library.selectedFolder) { _, new in grid.configure(library: library.selectedLibrary, folder: new, userId: session.currentUser?.id) }
             .fullScreenCover(item: $selectedPhoto) { photo in
                 PhotoDetailPagerView(photos: grid.photos, startPhoto: photo, onFavoriteToggled: { p in
                     Task { await grid.toggleFavorite(p) }
-                })
+                }, userId: session.currentUser?.id)
             }
             .sheet(isPresented: $showAddToAlbum) {
                 AddToAlbumSheet(session: session, photoIds: Array(selectedIds)) {

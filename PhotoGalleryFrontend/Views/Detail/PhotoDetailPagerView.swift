@@ -4,6 +4,7 @@ struct PhotoDetailPagerView: View {
     let photos: [Photo]
     let startPhoto: Photo
     var onFavoriteToggled: (Photo) -> Void
+    let userId: String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentId: String
@@ -13,10 +14,11 @@ struct PhotoDetailPagerView: View {
     @State private var dismissProgress: CGFloat = 0
     @State private var toastMessage: String?
 
-    init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void) {
+    init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void, userId: String?) {
         self.photos = photos
         self.startPhoto = startPhoto
         self.onFavoriteToggled = onFavoriteToggled
+        self.userId = userId
         _currentId = State(initialValue: startPhoto.id)
     }
 
@@ -53,7 +55,7 @@ struct PhotoDetailPagerView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .task(id: currentId) {
                 dismissProgress = 0
-                await detailVM.load(id: currentId)
+                await detailVM.load(id: currentId, userId: userId)
             }
 
             VStack {
@@ -100,7 +102,7 @@ struct PhotoDetailPagerView: View {
             Button {
                 guard let photo = currentPhoto else { return }
                 onFavoriteToggled(photo)
-                Task { await detailVM.toggleFavorite() }
+                Task { await detailVM.toggleFavorite(userId: userId) }
             } label: {
                 Image(systemName: (detailVM.detail?.favorite ?? currentPhoto?.favorite ?? false) ? "heart.fill" : "heart")
                     .foregroundStyle((detailVM.detail?.favorite ?? currentPhoto?.favorite ?? false) ? Theme.favorite : .white)

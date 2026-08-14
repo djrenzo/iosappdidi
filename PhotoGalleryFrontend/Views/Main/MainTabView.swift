@@ -8,7 +8,7 @@ struct MainTabView: View {
         TabView {
             GalleryView(session: session, library: library)
                 .tabItem { Label("Gallery", systemImage: "photo.on.rectangle.angled") }
-            FavoritesView(library: library)
+            FavoritesView(session: session)
                 .tabItem { Label("Favorites", systemImage: "heart.fill") }
             AlbumListView(session: session, library: library)
                 .tabItem { Label("Albums", systemImage: "rectangle.stack.fill") }
