@@ -32,9 +32,12 @@ jobs:
 
       - name: Inject app icon
         run: |
-          # Scale the 512x512 PWA icon up to the required 1024x1024
-          sips -z 1024 1024 public/pwa-512x512.png \
-            --out PhotoGalleryFrontend/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          # Render straight from the vector source at 1024x1024 — sips can only scale an
+          # existing raster up, which just blurs/upscales the smaller PWA PNG rather than
+          # producing real 1024px detail.
+          brew install librsvg
+          rsvg-convert -w 1024 -h 1024 public/icon.svg \
+            -o PhotoGalleryFrontend/Assets.xcassets/AppIcon.appiconset/AppIcon.png
           python3 - <<'EOF'
           import json
           path = 'PhotoGalleryFrontend/Assets.xcassets/AppIcon.appiconset/Contents.json'

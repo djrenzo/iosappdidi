@@ -17,6 +17,20 @@ enum PhotoSort: String, CaseIterable, Identifiable {
     }
 }
 
+enum SortDirection: String, CaseIterable, Identifiable {
+    case descending = "desc"
+    case ascending = "asc"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .descending: return "Descending"
+        case .ascending: return "Ascending"
+        }
+    }
+}
+
 /// Drives either a paginated library/folder/tag-filtered photo grid, or (when `favoriteOnly`)
 /// the user's favorites — a separate, non-paginated endpoint not scoped to any library.
 @MainActor
@@ -28,6 +42,9 @@ final class PhotoGridViewModel {
     var isLoadingMore = false
     var errorMessage: String?
     var sort: PhotoSort = .takenAt {
+        didSet { Task { await reload() } }
+    }
+    var sortOrder: SortDirection = .descending {
         didSet { Task { await reload() } }
     }
 
@@ -74,7 +91,7 @@ final class PhotoGridViewModel {
             } else {
                 guard let library else { return }
                 let page = try await api.photos(library: library, folder: folder, limit: pageSize, offset: 0,
-                                                 sort: sort.rawValue, order: "desc", tag: tag, userId: userId)
+                                                 sort: sort.rawValue, order: sortOrder.rawValue, tag: tag, userId: userId)
                 photos = page.items
                 total = page.total
             }
@@ -94,7 +111,7 @@ final class PhotoGridViewModel {
         defer { isLoadingMore = false }
         do {
             let page = try await api.photos(library: library, folder: folder, limit: pageSize, offset: photos.count,
-                                             sort: sort.rawValue, order: "desc", tag: tag, userId: userId)
+                                             sort: sort.rawValue, order: sortOrder.rawValue, tag: tag, userId: userId)
             photos.append(contentsOf: page.items)
             total = page.total
         } catch {

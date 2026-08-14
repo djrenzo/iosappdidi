@@ -95,6 +95,18 @@ Section refs point there for full detail.
 - [ ] `POST /api/auth/logout` / token revocation — sign-out is client-side only today; a stolen
       JWT stays valid for its full 30-day lifetime.
 
+## Operational
+
+- [ ] **The API hangs entirely while the indexer runs.** Confirmed expected given the current
+      architecture: `better-sqlite3` is synchronous (blocks the API's whole event loop per
+      query), and the API + indexer are separate processes sharing one SQLite file via the same
+      `openDb()`. Without WAL mode, the indexer's write transaction(s) hold an exclusive lock the
+      API's reads either block on or get `SQLITE_BUSY` from — freezing every endpoint for every
+      client, not just one request. Needs verifying against the indexer/`db.js` source (not in
+      this repo) and likely fixing with `PRAGMA journal_mode = WAL`, a `busy_timeout` pragma on
+      the API's connection, and/or having the indexer commit in smaller batches instead of one
+      transaction per scan. See spec §9 for the full writeup.
+
 ## Housekeeping
 
 - [ ] Rename `photos.db` / `user_folders.folder` — both hold a *library* name, not a filesystem

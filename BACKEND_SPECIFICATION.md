@@ -552,8 +552,28 @@ Steps 1–2 are breaking changes for the client and should ship together with an
 
 ## 9. Operational notes
 
-- **`better-sqlite3` is synchronous** — every query blocks the event loop. Fine for an indexed
-  SQLite read on a Pi; do not add unbounded scans or large `IN` lists to a hot path.
+- **Running the indexer while the API is serving requests can hang the API entirely — this is
+  expected given the current setup, not a bug in a specific request.** `better-sqlite3` is
+  synchronous, so every query blocks Node's single event loop for its full duration; the API and
+  the indexer are separate processes but open the *same* SQLite file via the *same* `openDb()`.
+  SQLite's default rollback-journal mode gives a writer an exclusive lock for the life of its
+  transaction, during which readers either block or get `SQLITE_BUSY`. If the indexer does a
+  large scan as one long transaction (or many transactions back-to-back with no gap), and the API
+  process's connection doesn't retry gracefully, the *entire* API process — every endpoint, every
+  client — is unresponsive for that whole window, because the blocking DB call freezes the one
+  thread handling all requests, not just the request that happens to touch a locked row.
+  **Likely fixes** (need verifying against the indexer/`db.js` source, not present in this repo):
+  - `PRAGMA journal_mode = WAL` on the database, if not already set — WAL specifically allows
+    concurrent readers while a single writer commits, instead of the default exclusive lock.
+  - A sane `busy_timeout` pragma on the API's connection (e.g. `db.pragma('busy_timeout = 5000')`)
+    so a lock contention blocks for a bounded, short window and retries, rather than throwing
+    immediately or hanging indefinitely.
+  - Have the indexer commit in smaller batches (e.g. per-file or per-folder transactions) rather
+    than one transaction for an entire library scan, bounding how long any single lock is held.
+- **`better-sqlite3` is synchronous** — every query blocks the event loop, which is exactly what
+  makes the indexer-hang above possible. Fine for a single indexed SQLite read on a Pi; do not
+  add unbounded scans or large `IN` lists to a hot path either, since that compounds the same
+  underlying issue even without the indexer running.
 - **The `db` column is a library name, and `user_folders.folder` also holds a library name.**
   Neither is a filesystem folder. `photos.folder` *is* one. Rename these before the confusion
   causes a real bug.

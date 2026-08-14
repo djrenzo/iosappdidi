@@ -86,7 +86,13 @@ struct GalleryView: View {
                     selectedPhoto = photo
                 }
             }
+            .onLongPressGesture { beginSelection(photo) }
             .task { await grid.loadMoreIfNeeded(current: photo) }
+    }
+
+    private func beginSelection(_ photo: Photo) {
+        if !selectionMode { selectionMode = true }
+        selectedIds.insert(photo.id)
     }
 
     private func toggleSelection(_ photo: Photo) {
@@ -100,6 +106,9 @@ struct GalleryView: View {
             Menu {
                 Picker("Sort", selection: $grid.sort) {
                     ForEach(PhotoSort.allCases) { sort in Text(sort.label).tag(sort) }
+                }
+                Picker("Order", selection: $grid.sortOrder) {
+                    ForEach(SortDirection.allCases) { direction in Text(direction.label).tag(direction) }
                 }
                 Button(selectionMode ? "Cancel Selection" : "Select Photos") {
                     selectionMode.toggle()

@@ -33,6 +33,7 @@ struct AlbumDetailView: View {
                     ForEach(detailVM.photos) { photo in
                         PhotoThumbnailView(photo: photo, isSelected: selectedIds.contains(photo.id), selectionMode: selectionMode)
                             .onTapGesture { handleTap(photo) }
+                            .onLongPressGesture { beginSelection(photo) }
                     }
                 }
                 .padding(16)
@@ -86,6 +87,11 @@ struct AlbumDetailView: View {
         } else {
             selectedPhoto = photo
         }
+    }
+
+    private func beginSelection(_ photo: Photo) {
+        if !selectionMode { selectionMode = true }
+        selectedIds.insert(photo.id)
     }
 
     private func removeSelected() async {

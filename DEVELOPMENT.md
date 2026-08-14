@@ -207,20 +207,25 @@ only be made with a direct API call.
 - **`AlbumsViewModel.load(userId:)` must always be passed `session.currentUser?.id`** — including
   in `AddToAlbumSheet`. Omitting it returns `400 user_id required`; passing the wrong one
   silently returns someone else's albums.
-- **`POST /api/albums` doesn't return `created_at`**, but `Album.createdAt` is non-optional, so
-  creating an album *always* fails to decode and shows an error even though the album was
-  created. Fix on the backend (return the inserted row) or make the field optional.
-- **`allowedFolders` ≠ `folders`.** The backend sends `allowedFolders`;
-  [User.swift](PhotoGalleryFrontend/Models/User.swift#L41) decodes `folders`, so it is always `nil`.
-- **`favorite` is presence-based** — the backend filters to favorites if the key exists at all,
-  whatever its value. Send it only when filtering; `PhotoGridViewModel` already does.
-- **`favorite` and tags are global, not per-user.** One user's Favorites tab is everyone's.
+- **Favoriting requires a `userId`.** `PATCH /api/photos/:id/favorite` needs `user_id` in the
+  body, and `GET /api/photos`, `GET /api/photos/:id`, `GET /api/albums/:id/photos` all need it as
+  a query param to resolve `favorite` correctly per-user — omit it and every photo comes back
+  `favorite: false`. Favorites themselves are per-user now; **tags are still global** across
+  every user.
+- **The Favorites tab hits a different, non-paginated endpoint.** `GET /api/favorites?user_id=`
+  returns a flat `Photo[]` (newest-taken first, not library-scoped) — no `limit`/`offset`, no
+  `{ total, items }` wrapper, unlike `GET /api/photos`. `PhotoGridViewModel.hasMore` is hardcoded
+  `false` in favorites mode for exactly this reason.
 - **`shared` is sent as an integer** (`0`/`1`); a JSON boolean is rejected by the schema.
 - **Album ordering is undefined.** `album_photos.position` is read but never written.
 - **A new self-signup user has no library grants**, so `/api/libraries` returns `[]` and the
   gallery is empty with no in-app way out.
 - **Response schemas strip undeclared fields.** If a backend field doesn't reach the app, check
   the route's `response` schema before suspecting the handler.
+- **Running the indexer can make the whole API unresponsive** — the app will see this as
+  timeouts/hangs on every request, not an error tied to anything the client did. It's a known
+  characteristic of the current backend (synchronous `better-sqlite3` + a shared SQLite file with
+  the indexer, likely without WAL mode) — see spec §9 before chasing it as a client bug.
 
 ---
 
@@ -236,9 +241,15 @@ only be made with a direct API call.
 
 ### App icon
 
-The workflow scales `public/pwa-512x512.png` to 1024×1024 via `sips` and writes it to `AppIcon.appiconset/AppIcon.png` before generating the Xcode project. The asset catalog uses the single-image universal format (iOS 17+), so only the 1024×1024 file is required.
+The workflow renders `public/icon.svg` straight to 1024×1024 via `rsvg-convert` (installed via
+`brew install librsvg` in the same step) and writes it to `AppIcon.appiconset/AppIcon.png` before
+generating the Xcode project — rendering from the vector source instead of upscaling the smaller
+PWA PNG (the old approach) avoids the blur an upscale would produce. The asset catalog uses the
+single-image universal format (iOS 17+), so only the 1024×1024 file is required.
 
-The same `AppIcon.png` (at 512×512) is committed to the repo as a local-build placeholder.
+The same `AppIcon.png` is committed to the repo as a local-build placeholder — regenerate it with
+`rsvg-convert -w 1024 -h 1024 public/icon.svg -o PhotoGalleryFrontend/Assets.xcassets/AppIcon.appiconset/AppIcon.png`
+if `icon.svg` changes, since nothing does that automatically outside CI.
 
 ### Producing the IPA
 
