@@ -8,25 +8,11 @@ struct PhotoDetailPagerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentId: String
-    /// The subset of `photos` actually handed to the TabView — see `computeWindow` below.
-    @State private var windowedPhotos: [Photo]
     @State private var detailVM = PhotoDetailViewModel()
     @State private var showTagEditor = false
     @State private var showInfo = false
     @State private var dismissProgress: CGFloat = 0
     @State private var toastMessage: String?
-
-    /// How many photos on either side of the current one stay mounted. `TabView(.page)` doesn't
-    /// virtualize its `ForEach` the way `LazyVGrid`/`List` do, so handing it the *entire* photos
-    /// array (which only grows as the grid pages in more) makes SwiftUI's diffing/layout work
-    /// scale with total library size — and since gesture tracking rides the same render loop,
-    /// swipes and the dismiss drag get progressively choppier the more has been scrolled
-    /// through. Kept generous (not a tight radius) as buffer margin, and only ever recomputed
-    /// from `.task(id: currentId)` below — i.e. once a page change has actually settled — rather
-    /// than a plain computed property that could re-evaluate mid-gesture and shift the
-    /// `ForEach`'s content out from under an in-progress TabView transition (this broke
-    /// left/right swiping outright the first time it was tried; see TODO.md).
-    private static let windowRadius = 5
 
     init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void, userId: String?) {
         self.photos = photos
@@ -34,19 +20,9 @@ struct PhotoDetailPagerView: View {
         self.onFavoriteToggled = onFavoriteToggled
         self.userId = userId
         _currentId = State(initialValue: startPhoto.id)
-        _windowedPhotos = State(initialValue: Self.computeWindow(around: startPhoto.id, in: photos))
     }
 
     private var currentPhoto: Photo? { photos.first { $0.id == currentId } }
-
-    private static func computeWindow(around id: String, in photos: [Photo]) -> [Photo] {
-        guard let currentIndex = photos.firstIndex(where: { $0.id == id }) else {
-            return photos.isEmpty ? [] : [photos[0]]
-        }
-        let lower = max(0, currentIndex - windowRadius)
-        let upper = min(photos.count - 1, currentIndex + windowRadius)
-        return Array(photos[lower...upper])
-    }
 
     var body: some View {
         ZStack {
@@ -57,29 +33,22 @@ struct PhotoDetailPagerView: View {
             // after the drag has already finished.
             Color.black.ignoresSafeArea()
                 .opacity(1 - Double(dismissProgress))
-            TabView(selection: $currentId) {
-                ForEach(windowedPhotos) { photo in
-                    ZoomableImageView(
-                        path: photo.previewUrl,
-                        thumbnailPath: photo.thumbUrl,
-                        onDismissProgress: { dismissProgress = $0 },
-                        onDismiss: {
-                            // The drag already animated the photo off-screen interactively —
-                            // letting the fullScreenCover *also* run its own default dismiss
-                            // transition on top just replays a second, redundant animation and
-                            // keeps the gallery underneath non-interactive until it finishes.
-                            withTransaction(Transaction(animation: nil)) {
-                                dismiss()
-                            }
-                        }
-                    )
-                    .tag(photo.id)
+            PagedPhotoView(
+                photos: photos,
+                currentId: $currentId,
+                onDismissProgress: { dismissProgress = $0 },
+                onDismiss: {
+                    // The drag already animated the photo off-screen interactively — letting
+                    // the fullScreenCover *also* run its own default dismiss transition on top
+                    // just replays a second, redundant animation and keeps the gallery
+                    // underneath non-interactive until it finishes.
+                    withTransaction(Transaction(animation: nil)) {
+                        dismiss()
+                    }
                 }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            )
             .task(id: currentId) {
                 dismissProgress = 0
-                windowedPhotos = Self.computeWindow(around: currentId, in: photos)
                 await detailVM.load(id: currentId, userId: userId)
             }
 
@@ -104,6 +73,13 @@ struct PhotoDetailPagerView: View {
         }
         .sheet(isPresented: $showTagEditor) { TagEditorSheet(viewModel: detailVM) }
         .preferredColorScheme(.dark)
+        // `.fullScreenCover` doesn't keep the presenting view composited behind it by default —
+        // even with a fully transparent `Color.black` above, there's nothing there to reveal,
+        // so the drag-to-dismiss fade looks like it's doing nothing. This is the documented,
+        // low-risk fix (iOS 16.4+). If it turns out not to be enough, the fallback is a more
+        // invasive UIKit trick (forcing the hosting controller's modalPresentationStyle to
+        // .overFullScreen with a clear backgroundColor via a UIViewControllerRepresentable).
+        .presentationBackground(.clear)
     }
 
     private var topBar: some View {

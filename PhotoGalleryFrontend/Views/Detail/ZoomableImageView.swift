@@ -7,8 +7,18 @@ struct ZoomableImageView: View {
     let path: String
     var onDismissProgress: (CGFloat) -> Void = { _ in }
     var onDismiss: () -> Void = {}
+    /// Reports whenever zoom crosses the zoomed/not-zoomed (`scale > 1`) boundary — used by
+    /// `PagedPhotoView` to disable page-swiping while a photo is pinch-zoomed, so panning around
+    /// a zoomed photo doesn't compete with turning the page.
+    var onScaleChanged: (Bool) -> Void = { _ in }
 
-    @State private var scale: CGFloat = 1
+    @State private var scale: CGFloat = 1 {
+        didSet {
+            let wasZoomed = oldValue > 1
+            let isZoomed = scale > 1
+            if wasZoomed != isZoomed { onScaleChanged(isZoomed) }
+        }
+    }
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
@@ -25,10 +35,11 @@ struct ZoomableImageView: View {
     /// way to transparent instantly instead of finishing the fade as part of the swipe.
     private let dismissDistance: CGFloat = 110
 
-    init(path: String, thumbnailPath: String? = nil, onDismissProgress: @escaping (CGFloat) -> Void = { _ in }, onDismiss: @escaping () -> Void = {}) {
+    init(path: String, thumbnailPath: String? = nil, onDismissProgress: @escaping (CGFloat) -> Void = { _ in }, onDismiss: @escaping () -> Void = {}, onScaleChanged: @escaping (Bool) -> Void = { _ in }) {
         self.path = path
         self.onDismissProgress = onDismissProgress
         self.onDismiss = onDismiss
+        self.onScaleChanged = onScaleChanged
         let thumbImage: UIImage? = {
             guard let thumbnailPath, let url = APIClient.shared.absoluteURL(forPath: thumbnailPath) else { return nil }
             return ImageCache.shared.image(for: url.absoluteString)
@@ -96,10 +107,10 @@ struct ZoomableImageView: View {
     }
 
     /// Only engages once a drag reads as clearly more vertical than horizontal, and only
-    /// tracks downward motion — so it never competes with TabView's left/right page swipe
-    /// or with an upward flick. The larger minimumDistance and steep angle requirement matter
-    /// here: any competing DragGesture recognizer that engages *early* during a horizontal
-    /// swipe measurably degrades TabView(.page)'s own paging feel, even if it never applies a
+    /// tracks downward motion — so it never competes with the page view controller's own
+    /// left/right page swipe or with an upward flick. The larger minimumDistance and steep angle
+    /// requirement matter here: any competing DragGesture recognizer that engages *early* during
+    /// a horizontal swipe measurably degrades the page-turn feel, even if it never applies a
     /// visual change — so this needs a clear, deliberate vertical motion before it activates
     /// at all, leaving fast/short horizontal flicks completely uncontested.
     private var dismissGesture: some Gesture {
