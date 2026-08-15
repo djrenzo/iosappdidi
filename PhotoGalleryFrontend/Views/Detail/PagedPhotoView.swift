@@ -61,11 +61,11 @@ struct PagedPhotoView: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: PagedPhotoView
         weak var scrollView: UIScrollView?
-        /// How many currently-mounted pages report themselves as zoomed in — page-swiping is
-        /// disabled while this is above zero. A count rather than a bool since up to 3 pages
-        /// (previous/current/next) can be alive at once, even though only the visible one is
-        /// normally interactive.
-        private var zoomedPageCount = 0
+        /// Photo ids of currently-mounted pages that report themselves as zoomed in —
+        /// page-swiping is disabled while this isn't empty. Keyed by id (rather than a plain
+        /// count) so each page's `ZoomableImageView` can report its own state idempotently via
+        /// `Set.insert`/`.remove`, without needing to track "was I zoomed before" itself.
+        private var zoomedPhotoIds: Set<String> = []
 
         init(parent: PagedPhotoView) {
             self.parent = parent
@@ -99,11 +99,16 @@ struct PagedPhotoView: UIViewControllerRepresentable {
             parent.currentId = visible.photoId
         }
 
-        /// Called by each mounted page's `ZoomableImageView` whenever its zoom state changes.
-        func setZoomed(_ isZoomed: Bool, wasZoomedBefore: Bool) {
-            guard isZoomed != wasZoomedBefore else { return }
-            zoomedPageCount = max(0, zoomedPageCount + (isZoomed ? 1 : -1))
-            scrollView?.isScrollEnabled = zoomedPageCount == 0
+        /// Called by a page's `ZoomableImageView` whenever its zoom state changes — disables
+        /// page-swiping while any mounted page is zoomed in, so panning around a zoomed photo
+        /// doesn't compete with turning the page.
+        fileprivate func setZoomed(_ isZoomed: Bool, for photoId: String) {
+            if isZoomed {
+                zoomedPhotoIds.insert(photoId)
+            } else {
+                zoomedPhotoIds.remove(photoId)
+            }
+            scrollView?.isScrollEnabled = zoomedPhotoIds.isEmpty
         }
     }
 }
@@ -113,19 +118,20 @@ struct PagedPhotoView: UIViewControllerRepresentable {
 /// specific `Photo` value.
 private final class PhotoPageViewController: UIHostingController<ZoomableImageView> {
     let photoId: String
-    private var isZoomed = false
 
     init(photo: Photo, coordinator: PagedPhotoView.Coordinator) {
         self.photoId = photo.id
+        // `super.init` hasn't run yet at this point, so nothing here can capture `self`
+        // (including `self.photoId`, just assigned above) — this local copy is what the
+        // closure below captures instead.
+        let photoId = photo.id
         super.init(rootView: ZoomableImageView(
             path: photo.previewUrl,
             thumbnailPath: photo.thumbUrl,
             onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
             onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() },
-            onScaleChanged: { [weak self, weak coordinator] zoomed in
-                guard let self else { return }
-                coordinator?.setZoomed(zoomed, wasZoomedBefore: self.isZoomed)
-                self.isZoomed = zoomed
+            onScaleChanged: { [weak coordinator] zoomed in
+                coordinator?.setZoomed(zoomed, for: photoId)
             }
         ))
         view.backgroundColor = .clear
