@@ -37,15 +37,7 @@ struct PhotoDetailPagerView: View {
                 photos: photos,
                 currentId: $currentId,
                 onDismissProgress: { dismissProgress = $0 },
-                onDismiss: {
-                    // The drag already animated the photo off-screen interactively — letting
-                    // the fullScreenCover *also* run its own default dismiss transition on top
-                    // just replays a second, redundant animation and keeps the gallery
-                    // underneath non-interactive until it finishes.
-                    withTransaction(Transaction(animation: nil)) {
-                        dismiss()
-                    }
-                }
+                onDismiss: { dismiss() }
             )
             .task(id: currentId) {
                 dismissProgress = 0

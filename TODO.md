@@ -32,50 +32,44 @@ Section refs point there for full detail.
 - [ ] **Possible double-encoding in `removeTag`.** `PhotoServerAPI.removeTag` percent-encodes the
       tag, then `APIClient`'s `appendingPathComponent`/`URLComponents` may encode again — tags
       with spaces or special characters could 404. Needs a device/simulator check.
-- [ ] **Photo detail swipe gestures get laggy on large folders/"all photos" — rearchitected,
-      unverified on-device.** `TabView(.page)` in `PhotoDetailPagerView` doesn't virtualize its
+- [x] **Photo detail swipe gestures were laggy on large folders/"all photos" — confirmed fixed
+      on-device.** `TabView(.page)` in `PhotoDetailPagerView` didn't virtualize its
       `ForEach(photos)` the way `LazyVGrid`/`List` do, so SwiftUI's diffing/layout work scaled with
-      the *entire* photos array, which only grows as the grid pages in more.
-      - **Attempt 1 (reverted):** windowed `ForEach` via a plain computed property. Broke
-        left/right swiping outright (transitions hung halfway) — likely `TabView`'s `selection`
-        binding updating while the interactive drag is still live, shifting the `ForEach`'s
-        content out from under an in-progress transition.
-      - **Attempt 2 (reverted):** windowed `ForEach` again via `@State` only recomputed inside
-        `.task(id: currentId)` (once a page change *settled*), wider radius (5) as buffer. Caused
-        a *different* regression: photos flashing to black as they were swiped away — most likely
-        the array reassignment right as `currentId` updates causing a brief re-layout that reveals
-        the black `Color` layer behind everything, even for photos whose identity was preserved.
-      - **Attempt 3 (current):** replaced `TabView(.page)` + `ForEach` entirely with a
-        hand-built [PagedPhotoView.swift](PhotoGalleryFrontend/Views/Detail/PagedPhotoView.swift)
-        — a `UIViewControllerRepresentable` wrapping `UIPageViewController`, with each page a
-        `UIHostingController<ZoomableImageView>` created on demand via the datasource's
-        before/after-by-index lookups. At most 1–3 pages ever exist regardless of array size —
-        this addresses the root cause directly (SwiftUI never has to diff/lay out the full
-        array) rather than trying to work around `TabView(.page)`'s bridging again. Page-swiping
-        is explicitly disabled while any mounted page is pinch-zoomed (`ZoomableImageView` gained
-        an `onScaleChanged` callback, aggregated in the coordinator, toggling the page view
-        controller's internal `UIScrollView.isScrollEnabled` — found via a subview search, since
-        it isn't exposed publicly but is guaranteed to exist with `.scroll` transition style).
-        `ZoomableImageView`'s own gesture logic (pinch/pan/dismiss-drag) is untouched.
-      **Unverified on a real device** — not testable in this sandbox (no macOS/Xcode). Things to
-      specifically check: swipe performance on a large folder (the actual point of this change),
-      left/right swiping still works normally, pinch-zoom no longer fights page-turning, and nothing
-      regressed for the dismiss-drag gesture (it now lives one level deeper in the view hierarchy,
-      inside a `UIHostingController` instead of directly under `TabView`).
+      the *entire* photos array, which only grows as the grid pages in more. Two windowing
+      attempts each caused their own regression (hung transitions, then black-flash-on-swipe — see
+      git history if resurrecting either matters). Fixed by replacing `TabView(.page)` + `ForEach`
+      entirely with a hand-built
+      [PagedPhotoView.swift](PhotoGalleryFrontend/Views/Detail/PagedPhotoView.swift) — a
+      `UIViewControllerRepresentable` wrapping `UIPageViewController`, with each page a
+      `UIHostingController<ZoomableImageView>` created on demand via the datasource's
+      before/after-by-index lookups. At most 1–3 pages ever exist regardless of array size, fixing
+      the root cause directly instead of working around `TabView(.page)`'s bridging. Page-swiping
+      is explicitly disabled while any mounted page is pinch-zoomed (`ZoomableImageView` gained an
+      `onScaleChanged` callback, aggregated in the coordinator, toggling the page view controller's
+      internal `UIScrollView.isScrollEnabled`, found via a subview search since it isn't exposed
+      publicly). Confirmed working: lag gone, left/right swipe works.
 
-- [ ] **Swipe-down-to-dismiss background still doesn't fade to transparent — cause probably
-      structural, fix unverified.** The drag mechanics work (image follows the finger, dismiss
-      threshold triggers correctly) but `Color.black`'s opacity fading to 0 never visibly reveals
-      the gallery behind it — survived two rounds of fixing the opacity math and the crossfade's
-      animation mechanism (neither touched the actual cause). Current best theory:
-      `.fullScreenCover` doesn't keep the presenting view composited behind it by default, so
-      even a genuinely-transparent `Color.black` has nothing behind it to reveal. Added
-      `.presentationBackground(.clear)` (iOS 16.4+) to `PhotoDetailPagerView` as the documented,
-      low-risk fix for this. **Unverified** — if the background still doesn't fade, the fallback
-      is a more invasive UIKit trick: a `UIViewControllerRepresentable` that reaches into the
-      hosting controller and forces `modalPresentationStyle = .overFullScreen` with a clear
-      `view.backgroundColor` (the standard community workaround for this known SwiftUI/UIKit
-      limitation). Needs a real device to confirm either way.
+- [x] **Swipe-down-to-dismiss background wasn't fading to transparent — confirmed fixed
+      on-device.** `.fullScreenCover` doesn't keep the presenting view composited behind it by
+      default, so even a genuinely-transparent `Color.black` had nothing behind it to reveal —
+      survived two rounds of fixing the opacity math and the crossfade's animation mechanism
+      first, since neither touched the actual (presentation-level, not content-level) cause. Fixed
+      by adding `.presentationBackground(.clear)` (iOS 16.4+) to `PhotoDetailPagerView`. Confirmed
+      working — gallery now visible through the fade during the drag.
+
+- [x] **Gallery frozen/unresponsive for ~1s right after dismissing — fixed, unverified.** Once
+      transparency was fixed above, a leftover workaround from *before* that fix became actively
+      harmful: `dismissGesture`'s commit path wrapped `onDismiss()` in a `Task { try? await
+      Task.sleep(50ms) }` and `PhotoDetailPagerView` wrapped `dismiss()` in
+      `withTransaction(Transaction(animation: nil))` — both added to avoid the system's dismiss
+      transition snapshotting a stale opaque frame, which is no longer a concern now that
+      `.presentationBackground(.clear)` handles transparency at the presentation level rather than
+      depending on catching our content's latest rendered frame. Forcing a zero-duration dismiss
+      via `withTransaction(animation: nil)` is a known way to get UIKit's transition coordinator
+      into an inconsistent state about when a transition is "complete" and safe to re-enable
+      interaction for — a plausible match for the freeze. Removed both; `onDismiss()` and
+      `dismiss()` are now called directly, letting the system's normal (now-correct) dismiss
+      handling run. Not yet re-tested on-device.
 
 ## Security (data plane has no auth)
 
