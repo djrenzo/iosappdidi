@@ -15,9 +15,18 @@ struct Photo: Codable, Identifiable, Hashable {
     let previewUrl: String
     let originalUrl: String
 
-    var takenAtDate: Date? {
-        guard let takenAt else { return nil }
-        return ISO8601DateFormatter().date(from: takenAt)
+    var takenAtDate: Date? { Photo.parseISO8601(takenAt) }
+
+    /// The backend sends fractional-second timestamps (e.g. "2024-07-14T10:22:31.000Z"), which
+    /// a default `ISO8601DateFormatter()` silently fails to parse — it needs the
+    /// `.withFractionalSeconds` option explicitly. Falls back to a plain parse for timestamps
+    /// without fractional seconds.
+    fileprivate static func parseISO8601(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        let withFractionalSeconds = ISO8601DateFormatter()
+        withFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFractionalSeconds.date(from: string) { return date }
+        return ISO8601DateFormatter().date(from: string)
     }
 }
 
@@ -38,6 +47,8 @@ struct PhotoDetail: Codable, Identifiable, Hashable {
     let cameraMake: String?
     let cameraModel: String?
     let tags: [String]
+
+    var takenAtDate: Date? { Photo.parseISO8601(takenAt) }
 
     var asPhoto: Photo {
         Photo(id: id, filename: filename, db: db, folder: folder, width: width, height: height,

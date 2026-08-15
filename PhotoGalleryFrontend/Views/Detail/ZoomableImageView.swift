@@ -18,7 +18,12 @@ struct ZoomableImageView: View {
     /// The already-cached thumbnail (if any), shown instantly while the full preview loads.
     @State private var cachedThumbnail: UIImage?
 
-    private let dismissDistance: CGFloat = 220
+    /// Distance to fully fade the background/chrome to transparent AND the physical-drag
+    /// commit threshold in `dismissGesture.onEnded` below — deliberately the same value. They
+    /// used to differ (220 vs. a hardcoded 100), so a normal drag would still be visibly opaque
+    /// (~45% faded) right as it crossed the threshold and dismissed, snapping the rest of the
+    /// way to transparent instantly instead of finishing the fade as part of the swipe.
+    private let dismissDistance: CGFloat = 110
 
     init(path: String, thumbnailPath: String? = nil, onDismissProgress: @escaping (CGFloat) -> Void = { _ in }, onDismiss: @escaping () -> Void = {}) {
         self.path = path
@@ -108,7 +113,7 @@ struct ZoomableImageView: View {
             .onEnded { value in
                 defer { isDismissDragging = false }
                 guard isDismissDragging else { return }
-                let shouldDismiss = value.translation.height > 100 || value.predictedEndTranslation.height > 220
+                let shouldDismiss = value.translation.height > dismissDistance || value.predictedEndTranslation.height > 220
                 if shouldDismiss {
                     onDismissProgress(1)
                     Task { @MainActor in

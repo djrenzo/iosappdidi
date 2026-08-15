@@ -96,11 +96,22 @@ refreshUser()
 
 ## Image Loading & Caching
 
-`AsyncPhotoImage` is a custom view backed by `ImageCache` (an `NSCache<NSString, UIImage>` singleton, 150 MB / 300 item limit). It replaces `AsyncImage` to provide reliable in-memory caching between views.
+`AsyncPhotoImage` is a custom view backed by `ImageCache`, a two-tier cache: an `NSCache<NSString, UIImage>` (150 MB / 300 item limit) for fast in-session reuse, backed by a disk directory under the app's Caches folder so images survive relaunches. It replaces `AsyncImage` to provide reliable caching between views and across launches.
 
-- Images are keyed by their absolute URL string.
-- `ImageCache.shared.clear()` wipes the memory cache **and** `URLCache.shared` disk entries.
-- A **Clear Image Cache** button is exposed in `ProfileView → Storage`.
+- Images are keyed by their absolute URL string, hashed (SHA256) into the on-disk filename — URL
+  strings aren't filename-safe as-is, and hashing sidesteps escaping edge cases entirely.
+- `ImageCache.image(for:)` is a synchronous, memory-only lookup (safe on a hot path like grid
+  scrolling); `ImageCache.diskImage(for:)` is the `async`, disk-backed fallback on a memory miss —
+  deliberately not `@MainActor`, so a disk read never blocks `AsyncPhotoImage`'s `@MainActor`
+  loader. `AsyncPhotoImage.loadImage()` checks memory, then disk, then the network, in that order.
+- `store(_:data:for:)` takes the original response `Data`, not a re-encoded `UIImage` — writing
+  the exact bytes the server sent avoids re-encoding cost/quality loss and preserves the source
+  format (webp, etc.).
+- Nothing evicts the disk tier automatically. It only shrinks via `ImageCache.shared.clear()`,
+  which wipes the memory cache, the on-disk directory, **and** `URLCache.shared`. A **Clear Image
+  Cache** button triggering this is exposed in `ProfileView → Storage`. Since disk entries persist
+  indefinitely otherwise, this cache can grow unbounded over time for a large library — there's no
+  automatic size cap or LRU eviction on the disk tier, by design (persist-until-manually-cleared).
 
 ### Which URL to use
 

@@ -24,6 +24,23 @@ struct PhotoDetailPagerView: View {
 
     private var currentPhoto: Photo? { photos.first { $0.id == currentId } }
 
+    /// `TabView(.page)` doesn't virtualize its `ForEach` the way `LazyVGrid`/`List` do — handing
+    /// it the *entire* photos array (which only ever grows as the grid pages in more) makes
+    /// SwiftUI's diffing/layout work scale with total library size, and since gesture tracking
+    /// rides the same render loop, swipes and the dismiss drag get progressively choppier the
+    /// more has been scrolled through. Windowing to a handful of photos around the current one —
+    /// recomputed each time `currentId` lands on a new photo — keeps the TabView's child count
+    /// constant no matter how large the underlying array is.
+    private var windowedPhotos: [Photo] {
+        guard let currentIndex = photos.firstIndex(where: { $0.id == currentId }) else {
+            return [startPhoto]
+        }
+        let radius = 3
+        let lower = max(0, currentIndex - radius)
+        let upper = min(photos.count - 1, currentIndex + radius)
+        return Array(photos[lower...upper])
+    }
+
     var body: some View {
         ZStack {
             // Must reach fully transparent (not just dimmed) by dismissProgress == 1 — the
@@ -34,7 +51,7 @@ struct PhotoDetailPagerView: View {
             Color.black.ignoresSafeArea()
                 .opacity(1 - Double(dismissProgress))
             TabView(selection: $currentId) {
-                ForEach(photos) { photo in
+                ForEach(windowedPhotos) { photo in
                     ZoomableImageView(
                         path: photo.previewUrl,
                         thumbnailPath: photo.thumbUrl,
@@ -138,26 +155,60 @@ struct PhotoDetailPagerView: View {
     }
 
     private var infoPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        Group {
             if let detail = detailVM.detail {
-                Text(detail.filename).font(.headline).foregroundStyle(.white)
-                if let make = detail.cameraMake, let model = detail.cameraModel {
-                    Text("\(make) \(model)").font(.caption).foregroundStyle(.white.opacity(0.8))
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(detail.filename)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        if let dateText = detail.takenAtDate?.formatted(date: .long, time: .shortened) {
+                            infoRow(icon: "calendar", text: dateText)
+                        }
+                        infoRow(icon: "folder", text: folderDisplayText(detail))
+                        if let make = detail.cameraMake, let model = detail.cameraModel {
+                            infoRow(icon: "camera", text: "\(make) \(model)")
+                        }
+                        if let width = detail.width, let height = detail.height {
+                            infoRow(icon: "aspectratio", text: "\(width) × \(height)")
+                        }
+                    }
                 }
-                if let taken = detail.takenAt {
-                    Text(taken).font(.caption).foregroundStyle(.white.opacity(0.8))
-                }
-                if let width = detail.width, let height = detail.height {
-                    Text("\(width) × \(height)").font(.caption).foregroundStyle(.white.opacity(0.8))
-                }
+                .padding(18)
             } else {
-                ProgressView().tint(.white)
+                ProgressView().tint(.white).padding(18)
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
+    }
+
+    private func infoRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(width: 16)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    private func folderDisplayText(_ detail: PhotoDetail) -> String {
+        var parts: [String] = []
+        if let db = detail.db, !db.isEmpty { parts.append(db) }
+        if !detail.folder.isEmpty { parts.append(detail.folder) }
+        return parts.isEmpty ? "Library Root" : parts.joined(separator: " › ")
     }
 }
