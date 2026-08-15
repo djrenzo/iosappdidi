@@ -71,7 +71,7 @@ struct PagedPhotoView: UIViewControllerRepresentable {
             self.parent = parent
         }
 
-        func makeController(forId id: String) -> PhotoPageViewController? {
+        fileprivate func makeController(forId id: String) -> PhotoPageViewController? {
             guard let photo = parent.photos.first(where: { $0.id == id }) else { return nil }
             return PhotoPageViewController(photo: photo, coordinator: self)
         }
