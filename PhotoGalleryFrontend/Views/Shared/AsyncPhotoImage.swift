@@ -12,9 +12,18 @@ struct AsyncPhotoImage<Placeholder: View>: View {
     @ViewBuilder var placeholder: () -> Placeholder
 
     /// Rendered immediately, never itself animated — `Image` doesn't interpolate pixel content
-    /// between two different `UIImage`s, so animating this value directly (the old approach)
-    /// just swaps the bitmap instantly regardless of `withAnimation`. `incomingImage` fades in
-    /// on top of it instead, giving a real crossfade with no gap where neither is visible.
+    /// between two different `UIImage`s, so animating this value directly just swaps the bitmap
+    /// instantly. `incomingImage` fades in on top of it instead, giving a real crossfade.
+    ///
+    /// Deliberately two *stable* layers with a plain opacity animation — no `.id()`-driven view
+    /// identity churn (an earlier version used `.id()` + `.transition()` to force a swap, which
+    /// is suspected of resetting gesture recognizers on ancestor views mid-interaction; this is
+    /// used inside `ZoomableImageView`, which attaches its pinch/pan/dismiss-drag gestures to
+    /// this view's output — identity churn here could plausibly disrupt a live drag on top of
+    /// it) — and no separate `Task.sleep`-based timer either (an even earlier version used one,
+    /// suspected of competing with `TabView(.page)`'s own gesture-driven transition). The
+    /// "promote incoming to base" step runs from `withAnimation`'s own completion callback
+    /// instead, so there's no extra async task or forced identity change anywhere in this.
     @State private var baseImage: UIImage?
     @State private var incomingImage: UIImage?
     @State private var incomingOpacity: Double = 0
@@ -57,11 +66,11 @@ struct AsyncPhotoImage<Placeholder: View>: View {
         }
         let key = url.absoluteString
         if let cached = ImageCache.shared.image(for: key) {
-            await crossfade(to: cached)
+            crossfade(to: cached)
             return
         }
         if !Task.isCancelled, let diskCached = await ImageCache.shared.diskImage(for: key) {
-            await crossfade(to: diskCached)
+            crossfade(to: diskCached)
             return
         }
         do {
@@ -71,32 +80,30 @@ struct AsyncPhotoImage<Placeholder: View>: View {
                 return
             }
             ImageCache.shared.store(image, data: data, for: key)
-            await crossfade(to: image)
+            crossfade(to: image)
         } catch {
             if !Task.isCancelled && baseImage == nil { failed = true }
         }
     }
 
     @MainActor
-    private func crossfade(to image: UIImage) async {
+    private func crossfade(to image: UIImage) {
         guard baseImage != nil else {
             // Nothing underneath to blend from (no placeholder was showing) — just show it.
             baseImage = image
             return
         }
-        let duration = 0.35
         incomingImage = image
         incomingOpacity = 0
-        withAnimation(.easeInOut(duration: duration)) {
+        withAnimation(.easeInOut(duration: 0.3), completionCriteria: .logicallyComplete) {
             incomingOpacity = 1
+        } completion: {
+            // Promote it to the base layer so if this view gets reused for a different path
+            // later (e.g. a recycled grid cell), the next crossfade blends from *this* image
+            // rather than the stale one left in `baseImage`.
+            baseImage = image
+            incomingImage = nil
+            incomingOpacity = 0
         }
-        try? await Task.sleep(for: .seconds(duration))
-        guard !Task.isCancelled else { return }
-        // Promote it to the base layer so if this view gets reused for a different path later
-        // (e.g. a recycled grid cell), the next crossfade blends from *this* image rather than
-        // the stale one left in `baseImage`.
-        baseImage = image
-        incomingImage = nil
-        incomingOpacity = 0
     }
 }

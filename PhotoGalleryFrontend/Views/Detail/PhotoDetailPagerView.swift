@@ -8,11 +8,25 @@ struct PhotoDetailPagerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentId: String
+    /// The subset of `photos` actually handed to the TabView — see `computeWindow` below.
+    @State private var windowedPhotos: [Photo]
     @State private var detailVM = PhotoDetailViewModel()
     @State private var showTagEditor = false
     @State private var showInfo = false
     @State private var dismissProgress: CGFloat = 0
     @State private var toastMessage: String?
+
+    /// How many photos on either side of the current one stay mounted. `TabView(.page)` doesn't
+    /// virtualize its `ForEach` the way `LazyVGrid`/`List` do, so handing it the *entire* photos
+    /// array (which only grows as the grid pages in more) makes SwiftUI's diffing/layout work
+    /// scale with total library size — and since gesture tracking rides the same render loop,
+    /// swipes and the dismiss drag get progressively choppier the more has been scrolled
+    /// through. Kept generous (not a tight radius) as buffer margin, and only ever recomputed
+    /// from `.task(id: currentId)` below — i.e. once a page change has actually settled — rather
+    /// than a plain computed property that could re-evaluate mid-gesture and shift the
+    /// `ForEach`'s content out from under an in-progress TabView transition (this broke
+    /// left/right swiping outright the first time it was tried; see TODO.md).
+    private static let windowRadius = 5
 
     init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void, userId: String?) {
         self.photos = photos
@@ -20,24 +34,17 @@ struct PhotoDetailPagerView: View {
         self.onFavoriteToggled = onFavoriteToggled
         self.userId = userId
         _currentId = State(initialValue: startPhoto.id)
+        _windowedPhotos = State(initialValue: Self.computeWindow(around: startPhoto.id, in: photos))
     }
 
     private var currentPhoto: Photo? { photos.first { $0.id == currentId } }
 
-    /// `TabView(.page)` doesn't virtualize its `ForEach` the way `LazyVGrid`/`List` do — handing
-    /// it the *entire* photos array (which only ever grows as the grid pages in more) makes
-    /// SwiftUI's diffing/layout work scale with total library size, and since gesture tracking
-    /// rides the same render loop, swipes and the dismiss drag get progressively choppier the
-    /// more has been scrolled through. Windowing to a handful of photos around the current one —
-    /// recomputed each time `currentId` lands on a new photo — keeps the TabView's child count
-    /// constant no matter how large the underlying array is.
-    private var windowedPhotos: [Photo] {
-        guard let currentIndex = photos.firstIndex(where: { $0.id == currentId }) else {
-            return [startPhoto]
+    private static func computeWindow(around id: String, in photos: [Photo]) -> [Photo] {
+        guard let currentIndex = photos.firstIndex(where: { $0.id == id }) else {
+            return photos.isEmpty ? [] : [photos[0]]
         }
-        let radius = 3
-        let lower = max(0, currentIndex - radius)
-        let upper = min(photos.count - 1, currentIndex + radius)
+        let lower = max(0, currentIndex - windowRadius)
+        let upper = min(photos.count - 1, currentIndex + windowRadius)
         return Array(photos[lower...upper])
     }
 
@@ -72,6 +79,7 @@ struct PhotoDetailPagerView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .task(id: currentId) {
                 dismissProgress = 0
+                windowedPhotos = Self.computeWindow(around: currentId, in: photos)
                 await detailVM.load(id: currentId, userId: userId)
             }
 
