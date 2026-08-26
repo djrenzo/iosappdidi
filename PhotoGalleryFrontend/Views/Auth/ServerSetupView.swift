@@ -60,6 +60,8 @@ struct ServerSetupView: View {
             Spacer()
             Spacer()
         }
+        .frame(maxWidth: 440)
+        .frame(maxWidth: .infinity)
     }
 
     private var icon: some View {

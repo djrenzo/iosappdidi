@@ -40,6 +40,7 @@ struct SignupView: View {
                     .disabled(name.isEmpty || password.isEmpty || isSubmitting)
                 }
                 .padding(24)
+                .frame(maxWidth: 440)
             }
             .background(Theme.background)
             .navigationTitle("Sign Up")

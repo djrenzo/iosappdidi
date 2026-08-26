@@ -26,6 +26,7 @@ struct LoginView: View {
             }
             .padding(24)
             .padding(.top, 40)
+            .frame(maxWidth: 440)
         }
         .background(Theme.background)
         .sheet(isPresented: $showSignup) { SignupView(session: session) }
