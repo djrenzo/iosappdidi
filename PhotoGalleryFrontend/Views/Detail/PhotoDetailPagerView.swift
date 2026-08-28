@@ -122,7 +122,7 @@ struct PhotoDetailPagerView: View {
     }
 
     private func downloadOriginal() async {
-        await detailVM.downloadOriginal(fallbackOriginalUrl: currentPhoto?.originalUrl)
+        await detailVM.downloadOriginal(fallbackOriginalUrl: currentPhoto?.originalUrl, fallbackMediaType: currentPhoto?.mediaType ?? .image)
         toastMessage = detailVM.downloadSucceeded ? "Saved to Photos" : detailVM.errorMessage
         detailVM.errorMessage = nil
         guard toastMessage != nil else { return }

@@ -113,10 +113,10 @@ struct PagedPhotoView: UIViewControllerRepresentable {
     }
 }
 
-/// A `UIHostingController` wrapping one photo's `ZoomableImageView`, tagged with its photo id so
-/// the coordinator can look up neighbors by array index without holding a reference back to a
-/// specific `Photo` value.
-private final class PhotoPageViewController: UIHostingController<ZoomableImageView> {
+/// A `UIHostingController` wrapping one photo's detail content — either `ZoomableImageView`
+/// for images or `VideoPageView` for videos — tagged with its photo id so the coordinator can
+/// look up neighbors by array index without holding a reference back to a specific `Photo` value.
+private final class PhotoPageViewController: UIHostingController<AnyView> {
     let photoId: String
 
     init(photo: Photo, coordinator: PagedPhotoView.Coordinator) {
@@ -125,15 +125,21 @@ private final class PhotoPageViewController: UIHostingController<ZoomableImageVi
         // (including `self.photoId`, just assigned above) — this local copy is what the
         // closure below captures instead.
         let photoId = photo.id
-        super.init(rootView: ZoomableImageView(
-            path: photo.previewUrl,
-            thumbnailPath: photo.thumbUrl,
-            onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
-            onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() },
-            onScaleChanged: { [weak coordinator] zoomed in
-                coordinator?.setZoomed(zoomed, for: photoId)
-            }
-        ))
+        let content: AnyView
+        if photo.mediaType == .video {
+            content = AnyView(VideoPageView(path: photo.originalUrl))
+        } else {
+            content = AnyView(ZoomableImageView(
+                path: photo.previewUrl ?? photo.thumbUrl,
+                thumbnailPath: photo.thumbUrl,
+                onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
+                onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() },
+                onScaleChanged: { [weak coordinator] zoomed in
+                    coordinator?.setZoomed(zoomed, for: photoId)
+                }
+            ))
+        }
+        super.init(rootView: content)
         view.backgroundColor = .clear
     }
 

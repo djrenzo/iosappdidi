@@ -126,7 +126,8 @@ final class PhotoGridViewModel {
         let current = photos[index]
         let newValue = !current.favorite
         photos[index] = Photo(id: current.id, filename: current.filename, db: current.db, folder: current.folder,
-                               width: current.width, height: current.height, takenAt: current.takenAt, favorite: newValue,
+                               mediaType: current.mediaType, width: current.width, height: current.height,
+                               takenAt: current.takenAt, favorite: newValue,
                                thumbReady: current.thumbReady, thumbError: current.thumbError, thumbUrl: current.thumbUrl,
                                previewUrl: current.previewUrl, originalUrl: current.originalUrl)
         do {

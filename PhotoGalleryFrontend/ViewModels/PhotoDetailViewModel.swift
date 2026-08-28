@@ -41,7 +41,7 @@ final class PhotoDetailViewModel {
         do {
             try await api.addTag(id: detail.id, tag: trimmed)
             self.detail = PhotoDetail(id: detail.id, filename: detail.filename, db: detail.db, folder: detail.folder,
-                                       width: detail.width, height: detail.height, takenAt: detail.takenAt,
+                                       mediaType: detail.mediaType, width: detail.width, height: detail.height, takenAt: detail.takenAt,
                                        favorite: detail.favorite, thumbReady: detail.thumbReady, thumbError: detail.thumbError,
                                        thumbUrl: detail.thumbUrl, previewUrl: detail.previewUrl, originalUrl: detail.originalUrl,
                                        cameraMake: detail.cameraMake, cameraModel: detail.cameraModel,
@@ -56,7 +56,7 @@ final class PhotoDetailViewModel {
         do {
             try await api.removeTag(id: detail.id, tag: tag)
             self.detail = PhotoDetail(id: detail.id, filename: detail.filename, db: detail.db, folder: detail.folder,
-                                       width: detail.width, height: detail.height, takenAt: detail.takenAt,
+                                       mediaType: detail.mediaType, width: detail.width, height: detail.height, takenAt: detail.takenAt,
                                        favorite: detail.favorite, thumbReady: detail.thumbReady, thumbError: detail.thumbError,
                                        thumbUrl: detail.thumbUrl, previewUrl: detail.previewUrl, originalUrl: detail.originalUrl,
                                        cameraMake: detail.cameraMake, cameraModel: detail.cameraModel,
@@ -66,14 +66,15 @@ final class PhotoDetailViewModel {
         }
     }
 
-    func downloadOriginal(fallbackOriginalUrl: String? = nil) async {
+    func downloadOriginal(fallbackOriginalUrl: String? = nil, fallbackMediaType: MediaType = .image) async {
         guard let originalUrl = detail?.originalUrl ?? fallbackOriginalUrl else { return }
+        let mediaType = detail?.mediaType ?? fallbackMediaType
         isDownloading = true
         errorMessage = nil
         downloadSucceeded = false
         defer { isDownloading = false }
         do {
-            try await PhotoLibrarySaver.save(path: originalUrl)
+            try await PhotoLibrarySaver.save(path: originalUrl, mediaType: mediaType)
             downloadSucceeded = true
         } catch {
             errorMessage = error.localizedDescription
@@ -83,7 +84,7 @@ final class PhotoDetailViewModel {
     private func applyFavorite(_ value: Bool) {
         guard let detail else { return }
         self.detail = PhotoDetail(id: detail.id, filename: detail.filename, db: detail.db, folder: detail.folder,
-                                   width: detail.width, height: detail.height, takenAt: detail.takenAt,
+                                   mediaType: detail.mediaType, width: detail.width, height: detail.height, takenAt: detail.takenAt,
                                    favorite: value, thumbReady: detail.thumbReady, thumbError: detail.thumbError,
                                    thumbUrl: detail.thumbUrl, previewUrl: detail.previewUrl, originalUrl: detail.originalUrl,
                                    cameraMake: detail.cameraMake, cameraModel: detail.cameraModel, tags: detail.tags)

@@ -15,6 +15,14 @@ struct PhotoThumbnailView: View {
                 .frame(width: geo.size.width, height: geo.size.width)
                 .clipped()
 
+                if photo.mediaType == .video {
+                    Image(systemName: "play.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .shadow(radius: 3)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
                 if photo.favorite {
                     Image(systemName: "heart.fill")
                         .font(.caption)

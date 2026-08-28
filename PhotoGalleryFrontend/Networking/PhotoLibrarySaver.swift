@@ -21,7 +21,7 @@ enum PhotoLibrarySaverError: LocalizedError {
 /// Downloads a photo-server relative path — always the full-resolution `originalUrl`,
 /// never `thumbUrl`/`previewUrl` — and saves it into the user's Photos library.
 enum PhotoLibrarySaver {
-    static func save(path: String) async throws {
+    static func save(path: String, mediaType: MediaType = .image) async throws {
         guard let url = APIClient.shared.absoluteURL(forPath: path) else {
             throw PhotoLibrarySaverError.invalidURL
         }
@@ -36,7 +36,7 @@ enum PhotoLibrarySaver {
 
         try await PHPhotoLibrary.shared().performChanges {
             let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .photo, data: data, options: nil)
+            request.addResource(with: mediaType == .video ? .video : .photo, data: data, options: nil)
         }
     }
 }
