@@ -24,6 +24,11 @@ struct VideoPageView: View {
         .swipeToDismiss(onDismissProgress: onDismissProgress, onDismiss: onDismiss)
         .onAppear {
             guard let url = APIClient.shared.absoluteURL(forPath: path) else { return }
+            // The default `.soloAmbient` category is silenced by the ring/silent switch, which
+            // left videos without sound on most phones. `.playback` plays audio regardless, like
+            // the Photos app.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try? AVAudioSession.sharedInstance().setActive(true)
             let player = AVPlayer(url: url)
             self.player = player
             if autoplay { player.play() }
@@ -31,6 +36,9 @@ struct VideoPageView: View {
         .onDisappear {
             player?.pause()
             player = nil
+            // Lets music the user had playing before resume. Fails harmlessly (and the session
+            // stays active) if the next page's video is already playing.
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 }
