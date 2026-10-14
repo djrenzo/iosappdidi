@@ -69,7 +69,11 @@ Section refs point there for full detail.
       into an inconsistent state about when a transition is "complete" and safe to re-enable
       interaction for — a plausible match for the freeze. Removed both; `onDismiss()` and
       `dismiss()` are now called directly, letting the system's normal (now-correct) dismiss
-      handling run. Not yet re-tested on-device.
+      handling run. **Still froze on-device** — the real cause is the modal itself: UIKit blocks
+      touches until a `.fullScreenCover`'s dismissal transition finishes, invisible here because
+      the cover is already transparent. Replaced every `.fullScreenCover` with an in-window
+      overlay above the `TabView` ([PhotoViewerPresenter.swift](PhotoGalleryFrontend/ViewModels/PhotoViewerPresenter.swift)),
+      so closing the viewer is plain view state. Not yet re-tested on-device.
 
 ## Security (data plane has no auth)
 

@@ -3,7 +3,7 @@ import SwiftUI
 struct FavoritesView: View {
     var session: SessionStore
     @State private var grid = PhotoGridViewModel(favoriteOnly: true)
-    @State private var selectedPhoto: Photo?
+    @Environment(PhotoViewerPresenter.self) private var photoViewer
     private let columns = [GridItem(.adaptive(minimum: 108, maximum: 140), spacing: 8)]
 
     var body: some View {
@@ -18,7 +18,11 @@ struct FavoritesView: View {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(grid.photos) { photo in
                             PhotoThumbnailView(photo: photo)
-                                .onTapGesture { selectedPhoto = photo }
+                                .onTapGesture {
+                                    photoViewer.present(photos: grid.photos, startPhoto: photo) { p in
+                                        Task { await grid.toggleFavorite(p) }
+                                    }
+                                }
                         }
                     }
                     .padding(16)
@@ -33,11 +37,6 @@ struct FavoritesView: View {
                 if !grid.configure(library: nil, folder: nil, userId: session.currentUser?.id) {
                     Task { await grid.reload() }
                 }
-            }
-            .fullScreenCover(item: $selectedPhoto) { photo in
-                PhotoDetailPagerView(photos: grid.photos, startPhoto: photo, onFavoriteToggled: { p in
-                    Task { await grid.toggleFavorite(p) }
-                }, userId: session.currentUser?.id)
             }
         }
     }

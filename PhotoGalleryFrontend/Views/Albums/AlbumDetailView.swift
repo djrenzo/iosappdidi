@@ -5,7 +5,7 @@ struct AlbumDetailView: View {
     var albumsViewModel: AlbumsViewModel
     var session: SessionStore
     @State private var detailVM = AlbumDetailViewModel()
-    @State private var selectedPhoto: Photo?
+    @Environment(PhotoViewerPresenter.self) private var photoViewer
     @State private var isShared: Bool
     @State private var selectionMode = false
     @State private var selectedIds: Set<String> = []
@@ -76,16 +76,13 @@ struct AlbumDetailView: View {
         }
         .toolbar(selectionMode ? .hidden : .visible, for: .tabBar)
         .task { await detailVM.load(albumId: album.id, userId: session.currentUser?.id) }
-        .fullScreenCover(item: $selectedPhoto) { photo in
-            PhotoDetailPagerView(photos: detailVM.photos, startPhoto: photo, onFavoriteToggled: { _ in }, userId: session.currentUser?.id)
-        }
     }
 
     private func handleTap(_ photo: Photo) {
         if selectionMode {
             if selectedIds.contains(photo.id) { selectedIds.remove(photo.id) } else { selectedIds.insert(photo.id) }
         } else {
-            selectedPhoto = photo
+            photoViewer.present(photos: detailVM.photos, startPhoto: photo)
         }
     }
 

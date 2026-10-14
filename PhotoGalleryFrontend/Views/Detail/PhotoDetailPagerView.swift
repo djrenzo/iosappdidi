@@ -5,8 +5,8 @@ struct PhotoDetailPagerView: View {
     let startPhoto: Photo
     var onFavoriteToggled: (Photo) -> Void
     let userId: String?
+    let onClose: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var currentId: String
     @State private var detailVM = PhotoDetailViewModel()
     @State private var showTagEditor = false
@@ -14,11 +14,13 @@ struct PhotoDetailPagerView: View {
     @State private var dismissProgress: CGFloat = 0
     @State private var toastMessage: String?
 
-    init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void, userId: String?) {
+    init(photos: [Photo], startPhoto: Photo, onFavoriteToggled: @escaping (Photo) -> Void, userId: String?,
+         onClose: @escaping () -> Void) {
         self.photos = photos
         self.startPhoto = startPhoto
         self.onFavoriteToggled = onFavoriteToggled
         self.userId = userId
+        self.onClose = onClose
         _currentId = State(initialValue: startPhoto.id)
     }
 
@@ -26,18 +28,16 @@ struct PhotoDetailPagerView: View {
 
     var body: some View {
         ZStack {
-            // Must reach fully transparent (not just dimmed) by dismissProgress == 1 — the
-            // dismiss gesture forces progress to 1 right as it triggers dismiss(), and anything
-            // still visible here at that instant gets caught in the fullScreenCover's own
-            // system dismiss transition, showing up as a separate black backdrop sliding away
-            // after the drag has already finished.
+            // Must reach fully transparent (not just dimmed) by dismissProgress == 1, so the
+            // grid underneath (this is an overlay, see PhotoViewerPresenter) shows through
+            // during the drag rather than a black backdrop fading out after it.
             Color.black.ignoresSafeArea()
                 .opacity(1 - Double(dismissProgress))
             PagedPhotoView(
                 photos: photos,
                 currentId: $currentId,
                 onDismissProgress: { dismissProgress = $0 },
-                onDismiss: { dismiss() }
+                onDismiss: { onClose() }
             )
             .task(id: currentId) {
                 dismissProgress = 0
@@ -63,20 +63,17 @@ struct PhotoDetailPagerView: View {
             .opacity(max(0, 1 - Double(dismissProgress) * 2))
             .animation(.easeOut(duration: 0.2), value: toastMessage)
         }
-        .sheet(isPresented: $showTagEditor) { TagEditorSheet(viewModel: detailVM) }
-        .preferredColorScheme(.dark)
-        // `.fullScreenCover` doesn't keep the presenting view composited behind it by default —
-        // even with a fully transparent `Color.black` above, there's nothing there to reveal,
-        // so the drag-to-dismiss fade looks like it's doing nothing. This is the documented,
-        // low-risk fix (iOS 16.4+). If it turns out not to be enough, the fallback is a more
-        // invasive UIKit trick (forcing the hosting controller's modalPresentationStyle to
-        // .overFullScreen with a clear backgroundColor via a UIViewControllerRepresentable).
-        .presentationBackground(.clear)
+        .sheet(isPresented: $showTagEditor) {
+            TagEditorSheet(viewModel: detailVM).environment(\.colorScheme, .dark)
+        }
+        // Not `.preferredColorScheme` — as an in-window overlay that would flip the whole app
+        // (including the grid underneath) to dark while the viewer is open.
+        .environment(\.colorScheme, .dark)
     }
 
     private var topBar: some View {
         HStack {
-            Button { dismiss() } label: {
+            Button { onClose() } label: {
                 Image(systemName: "xmark").font(.headline)
             }
             Spacer()

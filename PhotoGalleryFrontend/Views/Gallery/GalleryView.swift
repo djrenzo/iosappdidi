@@ -3,8 +3,8 @@ import SwiftUI
 struct GalleryView: View {
     var session: SessionStore
     var library: LibraryViewModel
+    @Environment(PhotoViewerPresenter.self) private var photoViewer
     @State private var grid = PhotoGridViewModel()
-    @State private var selectedPhoto: Photo?
     @State private var selectionMode = false
     @State private var selectedIds: Set<String> = []
     @State private var showAddToAlbum = false
@@ -38,11 +38,6 @@ struct GalleryView: View {
             }
             .onChange(of: library.selectedLibrary) { _, new in grid.configure(library: new, folder: library.selectedFolder, userId: session.currentUser?.id) }
             .onChange(of: library.selectedFolder) { _, new in grid.configure(library: library.selectedLibrary, folder: new, userId: session.currentUser?.id) }
-            .fullScreenCover(item: $selectedPhoto) { photo in
-                PhotoDetailPagerView(photos: grid.photos, startPhoto: photo, onFavoriteToggled: { p in
-                    Task { await grid.toggleFavorite(p) }
-                }, userId: session.currentUser?.id)
-            }
             .sheet(isPresented: $showAddToAlbum) {
                 AddToAlbumSheet(session: session, photoIds: Array(selectedIds)) {
                     selectionMode = false
@@ -66,15 +61,70 @@ struct GalleryView: View {
         .padding(.top, 8)
     }
 
+    /// Month subheadings only make sense in the date-sorted "All Folders" view.
+    private var showsDateSections: Bool { library.selectedFolder == nil && grid.sort == .takenAt }
+
     private var photoGrid: some View {
         LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(grid.photos) { photo in
-                thumbnailCell(photo)
+            if showsDateSections {
+                ForEach(dateSections) { section in
+                    Section {
+                        ForEach(section.photos) { photo in thumbnailCell(photo) }
+                    } header: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let yearTitle = section.yearTitle {
+                                Text(yearTitle)
+                                    .font(.title3.bold())
+                                    .foregroundStyle(Theme.textPrimary)
+                            }
+                            if let monthTitle = section.monthTitle {
+                                Text(monthTitle)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, section.yearTitle != nil ? 12 : 8)
+                    }
+                }
+            } else {
+                ForEach(grid.photos) { photo in
+                    thumbnailCell(photo)
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 24)
+    }
+
+    private struct DateSection: Identifiable {
+        let id: String
+        /// Only set on the first section of a new year, so the year isn't repeated for every month.
+        let yearTitle: String?
+        let monthTitle: String?
+        var photos: [Photo]
+    }
+
+    /// Groups consecutive photos sharing the same year/month (the list is already date-sorted).
+    private var dateSections: [DateSection] {
+        var sections: [DateSection] = []
+        var currentYear: String?
+        var currentMonth: String?
+        for photo in grid.photos {
+            let year = photo.takenAtYear.map(String.init) ?? "Unknown Date"
+            let month = photo.takenAtYear == nil ? nil : photo.takenAtMonthText
+            if !sections.isEmpty && year == currentYear && month == currentMonth {
+                sections[sections.count - 1].photos.append(photo)
+            } else {
+                sections.append(DateSection(id: "\(sections.count)-\(year)-\(month ?? "")",
+                                            yearTitle: year == currentYear ? nil : year,
+                                            monthTitle: month, photos: [photo]))
+                currentYear = year
+                currentMonth = month
+            }
+        }
+        return sections
     }
 
     private func thumbnailCell(_ photo: Photo) -> some View {
@@ -83,7 +133,9 @@ struct GalleryView: View {
                 if selectionMode {
                     toggleSelection(photo)
                 } else {
-                    selectedPhoto = photo
+                    photoViewer.present(photos: grid.photos, startPhoto: photo) { p in
+                        Task { await grid.toggleFavorite(p) }
+                    }
                 }
             }
             .onLongPressGesture { beginSelection(photo) }

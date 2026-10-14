@@ -129,7 +129,8 @@ final class PhotoGridViewModel {
                                mediaType: current.mediaType, width: current.width, height: current.height,
                                takenAt: current.takenAt, favorite: newValue,
                                thumbReady: current.thumbReady, thumbError: current.thumbError, thumbUrl: current.thumbUrl,
-                               previewUrl: current.previewUrl, originalUrl: current.originalUrl)
+                               previewUrl: current.previewUrl, originalUrl: current.originalUrl,
+                               takenAtYear: current.takenAtYear, takenAtMonthText: current.takenAtMonthText)
         do {
             try await api.setFavorite(id: current.id, favorite: newValue, userId: userId)
             if favoriteOnly && !newValue {

@@ -23,17 +23,8 @@ struct ZoomableImageView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var viewSize: CGSize = .zero
-    @State private var dismissDrag: CGFloat = 0
-    @State private var isDismissDragging = false
     /// The already-cached thumbnail (if any), shown instantly while the full preview loads.
     @State private var cachedThumbnail: UIImage?
-
-    /// Distance to fully fade the background/chrome to transparent AND the physical-drag
-    /// commit threshold in `dismissGesture.onEnded` below — deliberately the same value. They
-    /// used to differ (220 vs. a hardcoded 100), so a normal drag would still be visibly opaque
-    /// (~45% faded) right as it crossed the threshold and dismissed, snapping the rest of the
-    /// way to transparent instantly instead of finishing the fade as part of the swipe.
-    private let dismissDistance: CGFloat = 110
 
     init(path: String, thumbnailPath: String? = nil, onDismissProgress: @escaping (CGFloat) -> Void = { _ in }, onDismiss: @escaping () -> Void = {}, onScaleChanged: @escaping (Bool) -> Void = { _ in }) {
         self.path = path
@@ -51,19 +42,14 @@ struct ZoomableImageView: View {
         AsyncPhotoImage(path: path, contentMode: .fit, placeholderImage: cachedThumbnail) {
             ProgressView().tint(.white)
         }
-        .scaleEffect(scale * dismissScaleFactor)
-        .offset(x: offset.width, y: offset.height + dismissDrag)
-        .opacity(1 - Double(min(1, dismissDrag / dismissDistance)) * 0.4)
+        .scaleEffect(scale)
+        .offset(offset)
         .gesture(magnifyGesture)
         .simultaneousGesture(dragGesture, including: scale > 1 ? .all : .none)
         // Disabled entirely while zoomed in, so it can never fight the pinch/pan gestures above.
-        .simultaneousGesture(dismissGesture, including: scale > 1 ? .none : .all)
+        .swipeToDismiss(isEnabled: scale <= 1, onDismissProgress: onDismissProgress, onDismiss: onDismiss)
         .onTapGesture(count: 2) { resetOrZoom() }
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { viewSize = $0 })
-    }
-
-    private var dismissScaleFactor: CGFloat {
-        1 - min(0.2, dismissDrag / dismissDistance * 0.2)
     }
 
     private var magnifyGesture: some Gesture {
@@ -104,37 +90,6 @@ struct ZoomableImageView: View {
                                  height: lastOffset.height + value.translation.height)
             }
             .onEnded { _ in lastOffset = offset }
-    }
-
-    /// Only engages once a drag reads as clearly more vertical than horizontal, and only
-    /// tracks downward motion — so it never competes with the page view controller's own
-    /// left/right page swipe or with an upward flick. The larger minimumDistance and steep angle
-    /// requirement matter here: any competing DragGesture recognizer that engages *early* during
-    /// a horizontal swipe measurably degrades the page-turn feel, even if it never applies a
-    /// visual change — so this needs a clear, deliberate vertical motion before it activates
-    /// at all, leaving fast/short horizontal flicks completely uncontested.
-    private var dismissGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onChanged { value in
-                guard isDismissDragging || abs(value.translation.height) > abs(value.translation.width) * 2.5 else { return }
-                isDismissDragging = true
-                dismissDrag = max(0, value.translation.height)
-                onDismissProgress(min(1, dismissDrag / dismissDistance))
-            }
-            .onEnded { value in
-                defer { isDismissDragging = false }
-                guard isDismissDragging else { return }
-                let shouldDismiss = value.translation.height > dismissDistance || value.predictedEndTranslation.height > 220
-                if shouldDismiss {
-                    onDismissProgress(1)
-                    onDismiss()
-                } else {
-                    withAnimation(.interactiveSpring()) {
-                        dismissDrag = 0
-                        onDismissProgress(0)
-                    }
-                }
-            }
     }
 
     private func resetOrZoom() {

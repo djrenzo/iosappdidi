@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     var session: SessionStore
     @State private var library = LibraryViewModel()
+    @State private var photoViewer = PhotoViewerPresenter()
 
     var body: some View {
         TabView {
@@ -16,6 +17,17 @@ struct MainTabView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
         .tint(Theme.accent)
+        .environment(photoViewer)
+        .overlay {
+            if let presentation = photoViewer.presentation {
+                PhotoDetailPagerView(photos: presentation.photos, startPhoto: presentation.startPhoto,
+                                     onFavoriteToggled: presentation.onFavoriteToggled,
+                                     userId: session.currentUser?.id,
+                                     onClose: { photoViewer.dismiss() })
+                    .id(presentation.id)
+                    .transition(.opacity)
+            }
+        }
         // Keyed to the active server rather than a plain `.task` — switching to a server
         // with a saved session transitions phase .authenticated → .checking → .authenticated
         // synchronously (no network wait in between), so SwiftUI can coalesce that into a

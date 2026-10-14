@@ -6,6 +6,11 @@ import SwiftUI
 /// byte-range requests, so seeking works natively.
 struct VideoPageView: View {
     let path: String
+    /// Starts playback as soon as the player is created — set only for the page the viewer was
+    /// opened on (i.e. the video tapped in the grid), not for videos reached by swiping.
+    var autoplay = false
+    var onDismissProgress: (CGFloat) -> Void = { _ in }
+    var onDismiss: () -> Void = {}
     @State private var player: AVPlayer?
 
     var body: some View {
@@ -16,9 +21,12 @@ struct VideoPageView: View {
                 ProgressView().tint(.white)
             }
         }
+        .swipeToDismiss(onDismissProgress: onDismissProgress, onDismiss: onDismiss)
         .onAppear {
             guard let url = APIClient.shared.absoluteURL(forPath: path) else { return }
-            player = AVPlayer(url: url)
+            let player = AVPlayer(url: url)
+            self.player = player
+            if autoplay { player.play() }
         }
         .onDisappear {
             player?.pause()

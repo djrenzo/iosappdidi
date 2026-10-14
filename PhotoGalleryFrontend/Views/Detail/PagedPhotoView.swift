@@ -25,7 +25,7 @@ struct PagedPhotoView: UIViewControllerRepresentable {
         pageViewController.delegate = context.coordinator
         pageViewController.view.backgroundColor = .clear
 
-        if let startController = context.coordinator.makeController(forId: currentId) {
+        if let startController = context.coordinator.makeController(forId: currentId, autoplay: true) {
             pageViewController.setViewControllers([startController], direction: .forward, animated: false)
         }
         context.coordinator.scrollView = Self.findScrollView(in: pageViewController.view)
@@ -71,9 +71,9 @@ struct PagedPhotoView: UIViewControllerRepresentable {
             self.parent = parent
         }
 
-        fileprivate func makeController(forId id: String) -> PhotoPageViewController? {
+        fileprivate func makeController(forId id: String, autoplay: Bool = false) -> PhotoPageViewController? {
             guard let photo = parent.photos.first(where: { $0.id == id }) else { return nil }
-            return PhotoPageViewController(photo: photo, coordinator: self)
+            return PhotoPageViewController(photo: photo, coordinator: self, autoplay: autoplay)
         }
 
         private func controller(offsetBy offset: Int, from viewController: UIViewController) -> UIViewController? {
@@ -119,7 +119,7 @@ struct PagedPhotoView: UIViewControllerRepresentable {
 private final class PhotoPageViewController: UIHostingController<AnyView> {
     let photoId: String
 
-    init(photo: Photo, coordinator: PagedPhotoView.Coordinator) {
+    init(photo: Photo, coordinator: PagedPhotoView.Coordinator, autoplay: Bool = false) {
         self.photoId = photo.id
         // `super.init` hasn't run yet at this point, so nothing here can capture `self`
         // (including `self.photoId`, just assigned above) — this local copy is what the
@@ -127,7 +127,12 @@ private final class PhotoPageViewController: UIHostingController<AnyView> {
         let photoId = photo.id
         let content: AnyView
         if photo.mediaType == .video {
-            content = AnyView(VideoPageView(path: photo.originalUrl))
+            content = AnyView(VideoPageView(
+                path: photo.originalUrl,
+                autoplay: autoplay,
+                onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
+                onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() }
+            ))
         } else {
             content = AnyView(ZoomableImageView(
                 path: photo.previewUrl ?? photo.thumbUrl,

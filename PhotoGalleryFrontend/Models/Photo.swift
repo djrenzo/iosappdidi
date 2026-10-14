@@ -23,12 +23,17 @@ struct Photo: Codable, Identifiable, Hashable {
     /// `nil` for videos — the server never generates a preview asset for them.
     let previewUrl: String?
     let originalUrl: String
+    /// Server-computed capture year / localized month name, used for the date subheadings
+    /// in the gallery grid. Absent on older servers.
+    let takenAtYear: Int?
+    let takenAtMonthText: String?
 
     var takenAtDate: Date? { Photo.parseISO8601(takenAt) }
 
     init(id: String, filename: String, db: String?, folder: String, mediaType: MediaType, width: Int?,
          height: Int?, takenAt: String?, favorite: Bool, thumbReady: Bool, thumbError: String?,
-         thumbUrl: String, previewUrl: String?, originalUrl: String) {
+         thumbUrl: String, previewUrl: String?, originalUrl: String,
+         takenAtYear: Int? = nil, takenAtMonthText: String? = nil) {
         self.id = id
         self.filename = filename
         self.db = db
@@ -43,11 +48,14 @@ struct Photo: Codable, Identifiable, Hashable {
         self.thumbUrl = thumbUrl
         self.previewUrl = previewUrl
         self.originalUrl = originalUrl
+        self.takenAtYear = takenAtYear
+        self.takenAtMonthText = takenAtMonthText
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, filename, db, folder, mediaType, width, height, takenAt, favorite
         case thumbReady, thumbError, thumbUrl, previewUrl, originalUrl
+        case takenAtYear, takenAtMonthText
     }
 
     init(from decoder: Decoder) throws {
@@ -66,6 +74,8 @@ struct Photo: Codable, Identifiable, Hashable {
         thumbUrl = try values.decode(String.self, forKey: .thumbUrl)
         previewUrl = try values.decodeIfPresent(String.self, forKey: .previewUrl)
         originalUrl = try values.decode(String.self, forKey: .originalUrl)
+        takenAtYear = try values.decodeIfPresent(Int.self, forKey: .takenAtYear)
+        takenAtMonthText = try values.decodeIfPresent(String.self, forKey: .takenAtMonthText)
     }
 
     /// The backend sends fractional-second timestamps (e.g. "2024-07-14T10:22:31.000Z"), which
