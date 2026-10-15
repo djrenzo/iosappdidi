@@ -1,102 +1,211 @@
 import SwiftUI
 import UIKit
 
-/// A manually-controlled `UIPageViewController` wrapper for swiping between photos, replacing
-/// SwiftUI's `TabView(.page)`. `TabView(.page)` doesn't virtualize its `ForEach` — handing it a
-/// large photos array made its diffing/layout cost (and, since gesture tracking rides the same
-/// render loop, swipe/dismiss responsiveness) scale with total library size, and two separate
-/// attempts at windowing the `ForEach` down each caused their own distinct regressions (see
-/// TODO.md). `UIPageViewController` only ever keeps 1–3 pages alive via its datasource,
-/// regardless of array size — this fixes the root cause directly instead of working around
-/// SwiftUI's bridging.
-struct PagedPhotoView: UIViewControllerRepresentable {
+/// Horizontal pager for swiping between photos/videos, built on a paging `UICollectionView`
+/// (the same model the Photos app uses).
+///
+/// History: `TabView(.page)` didn't virtualize its `ForEach`, so its cost scaled with library
+/// size (see TODO.md). Its replacement, `UIPageViewController`, fixed that but dropped quick
+/// back-to-back flicks: it ignores a new pan while the previous page transition is still
+/// settling. A paging `UIScrollView` can be caught mid-deceleration and flicked again, which is
+/// what makes Photos feel instant. Cells are reused, so only the 1–3 visible/adjacent pages ever
+/// exist regardless of array size.
+struct PagedPhotoView: UIViewRepresentable {
     let photos: [Photo]
     @Binding var currentId: String
     let onDismissProgress: (CGFloat) -> Void
     let onDismiss: () -> Void
 
-    func makeUIViewController(context: Context) -> UIPageViewController {
-        let pageViewController = UIPageViewController(
-            transitionStyle: .scroll,
-            navigationOrientation: .horizontal,
-            options: nil
-        )
-        pageViewController.dataSource = context.coordinator
-        pageViewController.delegate = context.coordinator
-        pageViewController.view.backgroundColor = .clear
+    /// Black gap between neighboring pages while swiping, like Photos.
+    static let pageSpacing: CGFloat = 20
 
-        if let startController = context.coordinator.makeController(forId: currentId, autoplay: true) {
-            pageViewController.setViewControllers([startController], direction: .forward, animated: false)
-        }
-        context.coordinator.scrollView = Self.findScrollView(in: pageViewController.view)
-        return pageViewController
+    func makeUIView(context: Context) -> PagerContainerView {
+        let coordinator = context.coordinator
+        coordinator.currentIndex = photos.firstIndex { $0.id == currentId } ?? 0
+        coordinator.autoplayId = currentId
+        return PagerContainerView(coordinator: coordinator)
     }
 
-    func updateUIViewController(_ pageViewController: UIPageViewController, context: Context) {
-        // The coordinator reads `parent` fresh on every callback (see PhotoPageViewController's
-        // closures below), so this is the only wiring needed to keep it pointed at the latest
-        // closures/photos across SwiftUI re-renders — no need to push `currentId` back into the
-        // page view controller here, since the only thing that ever changes it is this view's
-        // own delegate callback in the first place.
+    func updateUIView(_ view: PagerContainerView, context: Context) {
+        // The coordinator reads `parent` fresh on every callback, so this keeps it pointed at the
+        // latest closures/photos across SwiftUI re-renders. `currentId` is never pushed back in:
+        // the only thing that changes it is this view's own scroll callbacks.
+        let photosChanged = context.coordinator.parent.photos.map(\.id) != photos.map(\.id)
         context.coordinator.parent = self
+        if photosChanged {
+            context.coordinator.currentIndex = photos.firstIndex { $0.id == currentId } ?? 0
+            view.collectionView.reloadData()
+            view.setNeedsLayout()
+        }
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    /// `UIPageViewController` doesn't expose its internal scroll view publicly, but with
-    /// `.scroll` transition style it always backs its content with exactly one — this is a
-    /// long-standing, widely-used technique to reach it. Used to disable page-swiping while
-    /// zoomed in, so pinch/pan on the photo doesn't compete with turning the page.
-    private static func findScrollView(in view: UIView) -> UIScrollView? {
-        for subview in view.subviews {
-            if let scrollView = subview as? UIScrollView { return scrollView }
-            if let found = findScrollView(in: subview) { return found }
+    /// Hosts the collection view, sized `pageSpacing` wider than the screen (half on each side)
+    /// so each page carries its own share of the gap and paging still snaps a full page at a time.
+    final class PagerContainerView: UIView {
+        let collectionView: UICollectionView
+        private let layout = UICollectionViewFlowLayout()
+        private weak var coordinator: Coordinator?
+
+        init(coordinator: Coordinator) {
+            self.coordinator = coordinator
+            layout.scrollDirection = .horizontal
+            layout.minimumLineSpacing = 0
+            layout.minimumInteritemSpacing = 0
+            collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+            super.init(frame: .zero)
+
+            collectionView.backgroundColor = .clear
+            collectionView.isPagingEnabled = true
+            collectionView.showsHorizontalScrollIndicator = false
+            collectionView.showsVerticalScrollIndicator = false
+            collectionView.contentInsetAdjustmentBehavior = .never
+            collectionView.alwaysBounceVertical = false
+            collectionView.register(PhotoPageCell.self, forCellWithReuseIdentifier: PhotoPageCell.reuseId)
+            collectionView.dataSource = coordinator
+            collectionView.delegate = coordinator
+            coordinator.collectionView = collectionView
+
+            clipsToBounds = true
+            backgroundColor = .clear
+            addSubview(collectionView)
         }
-        return nil
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let coordinator, bounds.width > 0 else { return }
+            let frame = bounds.insetBy(dx: -PagedPhotoView.pageSpacing / 2, dy: 0)
+            guard collectionView.frame != frame else { return }
+            // First layout or a size change (rotation, iPad split view): resize pages and keep
+            // the same photo on screen. Scroll callbacks are ignored meanwhile, since UIKit
+            // clamps/shifts the offset during the resize.
+            coordinator.isRelayingOut = true
+            collectionView.frame = frame
+            layout.itemSize = frame.size
+            layout.invalidateLayout()
+            collectionView.layoutIfNeeded()
+            collectionView.contentOffset = CGPoint(x: CGFloat(coordinator.currentIndex) * frame.width, y: 0)
+            coordinator.isRelayingOut = false
+        }
     }
 
     @MainActor
-    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
         var parent: PagedPhotoView
-        weak var scrollView: UIScrollView?
+        weak var collectionView: UICollectionView?
+        var currentIndex = 0
+        var isRelayingOut = false
+        /// Only the photo the viewer was opened on autoplays (if it's a video), and only once —
+        /// not when it's scrolled back to later.
+        var autoplayId: String?
         /// Photo ids of currently-mounted pages that report themselves as zoomed in —
-        /// page-swiping is disabled while this isn't empty. Keyed by id (rather than a plain
-        /// count) so each page's `ZoomableImageView` can report its own state idempotently via
-        /// `Set.insert`/`.remove`, without needing to track "was I zoomed before" itself.
+        /// page-swiping is disabled while this isn't empty. Keyed by id so each page's
+        /// `ZoomableImageView` can report its own state idempotently.
         private var zoomedPhotoIds: Set<String> = []
 
         init(parent: PagedPhotoView) {
             self.parent = parent
         }
 
-        fileprivate func makeController(forId id: String, autoplay: Bool = false) -> PhotoPageViewController? {
-            guard let photo = parent.photos.first(where: { $0.id == id }) else { return nil }
-            return PhotoPageViewController(photo: photo, coordinator: self, autoplay: autoplay)
+        func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+            parent.photos.count
         }
 
-        private func controller(offsetBy offset: Int, from viewController: UIViewController) -> UIViewController? {
-            guard let current = viewController as? PhotoPageViewController,
-                  let index = parent.photos.firstIndex(where: { $0.id == current.photoId }) else {
-                return nil
+        func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PhotoPageCell.reuseId, for: indexPath) as! PhotoPageCell
+            configure(cell, at: indexPath.item)
+            return cell
+        }
+
+        func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+            // A prefetched cell can be shown again after `didEndDisplaying` cleared it, without
+            // another `cellForItemAt` — restore its content in that case.
+            guard let cell = cell as? PhotoPageCell, cell.photoId == nil else { return }
+            configure(cell, at: indexPath.item)
+        }
+
+        func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+            // Off-screen cells stay in the view hierarchy (hidden) for reuse, so SwiftUI's
+            // `onDisappear` wouldn't reliably fire — tearing the content down explicitly is what
+            // stops a swiped-away video from playing on in the background.
+            guard let cell = cell as? PhotoPageCell else { return }
+            if let id = cell.photoId { setZoomed(false, for: id) }
+            cell.photoId = nil
+            cell.contentConfiguration = nil
+        }
+
+        private func configure(_ cell: PhotoPageCell, at index: Int) {
+            guard parent.photos.indices.contains(index) else { return }
+            let photo = parent.photos[index]
+            let autoplay = photo.id == autoplayId
+            if autoplay { autoplayId = nil }
+            cell.photoId = photo.id
+            let onDismissProgress: (CGFloat) -> Void = { [weak self] in self?.parent.onDismissProgress($0) }
+            let onDismiss: () -> Void = { [weak self] in self?.parent.onDismiss() }
+            let photoId = photo.id
+            cell.contentConfiguration = UIHostingConfiguration {
+                Group {
+                    if photo.mediaType == .video {
+                        VideoPageView(
+                            path: photo.originalUrl,
+                            autoplay: autoplay,
+                            onDismissProgress: onDismissProgress,
+                            onDismiss: onDismiss
+                        )
+                    } else {
+                        ZoomableImageView(
+                            path: photo.previewUrl ?? photo.thumbUrl,
+                            thumbnailPath: photo.thumbUrl,
+                            onDismissProgress: onDismissProgress,
+                            onDismiss: onDismiss,
+                            onScaleChanged: { [weak self] zoomed in self?.setZoomed(zoomed, for: photoId) }
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, PagedPhotoView.pageSpacing / 2)
+                // Fresh view identity per photo, so zoom/player state never leaks into a reused cell.
+                .id(photoId)
             }
-            let targetIndex = index + offset
-            guard parent.photos.indices.contains(targetIndex) else { return nil }
-            return PhotoPageViewController(photo: parent.photos[targetIndex], coordinator: self)
+            .margins(.all, 0)
+            cell.backgroundConfiguration = .clear()
         }
 
-        func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
-            controller(offsetBy: -1, from: viewController)
+        // MARK: Tracking the current page
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard !isRelayingOut, scrollView.bounds.width > 0 else { return }
+            let page = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
+            currentIndex = min(max(page, 0), max(parent.photos.count - 1, 0))
         }
 
-        func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
-            controller(offsetBy: 1, from: viewController)
+        // `currentId` is only published once scrolling settles: it drives a re-render of the
+        // chrome and a detail fetch, which would compete with the swipe animation if it fired on
+        // every page crossed during a run of quick flicks.
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            publishCurrentPage()
         }
 
-        func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-            guard completed, let visible = pageViewController.viewControllers?.first as? PhotoPageViewController else { return }
-            parent.currentId = visible.photoId
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            if !decelerate { publishCurrentPage() }
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            publishCurrentPage()
+        }
+
+        private func publishCurrentPage() {
+            guard parent.photos.indices.contains(currentIndex) else { return }
+            let id = parent.photos[currentIndex].id
+            if parent.currentId != id { parent.currentId = id }
         }
 
         /// Called by a page's `ZoomableImageView` whenever its zoom state changes — disables
@@ -108,48 +217,13 @@ struct PagedPhotoView: UIViewControllerRepresentable {
             } else {
                 zoomedPhotoIds.remove(photoId)
             }
-            scrollView?.isScrollEnabled = zoomedPhotoIds.isEmpty
+            collectionView?.isScrollEnabled = zoomedPhotoIds.isEmpty
         }
     }
 }
 
-/// A `UIHostingController` wrapping one photo's detail content — either `ZoomableImageView`
-/// for images or `VideoPageView` for videos — tagged with its photo id so the coordinator can
-/// look up neighbors by array index without holding a reference back to a specific `Photo` value.
-private final class PhotoPageViewController: UIHostingController<AnyView> {
-    let photoId: String
-
-    init(photo: Photo, coordinator: PagedPhotoView.Coordinator, autoplay: Bool = false) {
-        self.photoId = photo.id
-        // `super.init` hasn't run yet at this point, so nothing here can capture `self`
-        // (including `self.photoId`, just assigned above) — this local copy is what the
-        // closure below captures instead.
-        let photoId = photo.id
-        let content: AnyView
-        if photo.mediaType == .video {
-            content = AnyView(VideoPageView(
-                path: photo.originalUrl,
-                autoplay: autoplay,
-                onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
-                onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() }
-            ))
-        } else {
-            content = AnyView(ZoomableImageView(
-                path: photo.previewUrl ?? photo.thumbUrl,
-                thumbnailPath: photo.thumbUrl,
-                onDismissProgress: { [weak coordinator] progress in coordinator?.parent.onDismissProgress(progress) },
-                onDismiss: { [weak coordinator] in coordinator?.parent.onDismiss() },
-                onScaleChanged: { [weak coordinator] zoomed in
-                    coordinator?.setZoomed(zoomed, for: photoId)
-                }
-            ))
-        }
-        super.init(rootView: content)
-        view.backgroundColor = .clear
-    }
-
-    @available(*, unavailable)
-    required dynamic init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+private final class PhotoPageCell: UICollectionViewCell {
+    static let reuseId = "PhotoPageCell"
+    /// `nil` while the cell's content is torn down (see `didEndDisplaying`).
+    var photoId: String?
 }

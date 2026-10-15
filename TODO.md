@@ -49,6 +49,13 @@ Section refs point there for full detail.
       internal `UIScrollView.isScrollEnabled`, found via a subview search since it isn't exposed
       publicly). Confirmed working: lag gone, left/right swipe works.
 
+- [x] **Quick short left/right flicks in the photo viewer were sometimes dropped — fixed,
+      unverified.** `UIPageViewController` ignores a new pan while the previous page transition
+      is still settling, so rapid back-to-back swipes didn't register. `PagedPhotoView` is now a
+      paging `UICollectionView` (cells hosting the SwiftUI page via `UIHostingConfiguration`),
+      which can be caught mid-deceleration like the Photos app, with a 20pt gap between pages.
+      Cell content is torn down in `didEndDisplaying` so swiped-away videos stop playing.
+
 - [x] **Swipe-down-to-dismiss background wasn't fading to transparent — confirmed fixed
       on-device.** `.fullScreenCover` doesn't keep the presenting view composited behind it by
       default, so even a genuinely-transparent `Color.black` had nothing behind it to reveal —

@@ -45,6 +45,10 @@ struct PhotoThumbnailView: View {
         .aspectRatio(1, contentMode: .fit)
         .background(Theme.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        // clipShape/clipped only clip drawing, not hit-testing: a scaledToFill image still
+        // receives taps in its overflow, which spills into neighboring cells. Pin the tap area
+        // to the cell's own bounds.
+        .contentShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(isSelected ? Theme.accent : .clear, lineWidth: 3)

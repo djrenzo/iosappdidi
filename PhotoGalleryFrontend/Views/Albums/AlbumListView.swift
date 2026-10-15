@@ -67,6 +67,8 @@ private struct AlbumCard: View {
         }
         .padding(10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+        // Keep the cover's clipped-but-still-hittable overflow from stealing taps from neighbors.
+        .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
     }
 }
 

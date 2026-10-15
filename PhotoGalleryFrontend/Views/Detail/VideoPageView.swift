@@ -1,4 +1,5 @@
 import AVKit
+import Combine
 import SwiftUI
 
 /// One video page inside `PagedPhotoView` — plays the original asset (never `previewUrl`,
@@ -12,11 +13,32 @@ struct VideoPageView: View {
     var onDismissProgress: (CGFloat) -> Void = { _ in }
     var onDismiss: () -> Void = {}
     @State private var player: AVPlayer?
+    /// Drives the play-button overlay, so a video reached by swiping (which doesn't autoplay)
+    /// reads as playable instead of looking like a still image.
+    @State private var isPaused = true
 
     var body: some View {
         Group {
             if let player {
                 VideoPlayer(player: player)
+                    .overlay {
+                        if isPaused {
+                            Button { play(player) } label: {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 30, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .offset(x: 2) // optically center the triangle
+                                    .frame(width: 72, height: 72)
+                                    .background(.black.opacity(0.45), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: isPaused)
+                    .onReceive(player.publisher(for: \.timeControlStatus).receive(on: DispatchQueue.main)) { status in
+                        isPaused = status == .paused
+                    }
             } else {
                 ProgressView().tint(.white)
             }
@@ -31,6 +53,7 @@ struct VideoPageView: View {
             try? AVAudioSession.sharedInstance().setActive(true)
             let player = AVPlayer(url: url)
             self.player = player
+            isPaused = !autoplay
             if autoplay { player.play() }
         }
         .onDisappear {
@@ -40,5 +63,14 @@ struct VideoPageView: View {
             // stays active) if the next page's video is already playing.
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
+    }
+
+    private func play(_ player: AVPlayer) {
+        // Restart from the beginning if the video already played through to the end.
+        if let item = player.currentItem, item.duration.isNumeric,
+           player.currentTime() >= item.duration {
+            player.seek(to: .zero)
+        }
+        player.play()
     }
 }
